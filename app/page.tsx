@@ -67,6 +67,7 @@ export default function Home() {
   // Voice recognition states & refs
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
+  const initialInputRef = useRef<string>('');
 
   // Derived state: current active session and its messages
   const activeSession = sessions.find(s => s.id === activeSessionId);
@@ -309,13 +310,24 @@ export default function Home() {
         };
 
         rec.onresult = (event: any) => {
-          const transcript = event.results[0][0].transcript;
-          setInputValue(prev => prev ? `${prev} ${transcript}` : transcript);
+          let parts = [];
+          for (let i = 0; i < event.results.length; i++) {
+            parts.push(event.results[i][0].transcript);
+          }
+          const transcript = parts.join(' ').trim();
+          const base = initialInputRef.current.trim();
+          setInputValue(base ? `${base} ${transcript}` : transcript);
         };
 
         recognitionRef.current = rec;
       }
     }
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+      }
+    };
   }, []);
 
   const handleMicClick = () => {
@@ -328,6 +340,7 @@ export default function Home() {
       recognitionRef.current.stop();
     } else {
       try {
+        initialInputRef.current = inputValue;
         recognitionRef.current.start();
       } catch (err) {
         console.error('Failed to start speech recognition:', err);
