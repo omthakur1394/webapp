@@ -154,6 +154,7 @@ function ChatOrderTracker({ orderId, theme }: { orderId: string; theme: 'light' 
 }
 
 export default function Home() {
+  const [mounted, setMounted] = useState(false);
   // Support chat sessions states
   const [supportSessions, setSupportSessions] = useState<ChatSession[]>([]);
   const [activeSupportSessionId, setActiveSupportSessionId] = useState<string>('');
@@ -226,6 +227,7 @@ export default function Home() {
 
   // Load initial session, theme, and chat history on mount
   useEffect(() => {
+    setMounted(true);
     // Load auth session
     const savedUser = localStorage.getItem('shopease_user');
     if (savedUser) {
@@ -925,6 +927,10 @@ export default function Home() {
   const executeCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!shippingAddress.trim() || !buyProduct) return;
+    if (!currentUser) {
+      setToastMessage('You must be logged in to place an order.');
+      return;
+    }
     setIsOrderPlacing(true);
     try {
       const res = await fetch('/api/order', {
@@ -933,7 +939,7 @@ export default function Home() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          user_id: currentUser?.id?.toString() || '1',
+          user_id: currentUser.id.toString(),
           product_name: buyProduct.name,
           price: buyProduct.price
         }),
@@ -1336,6 +1342,196 @@ export default function Home() {
       </section>
     );
   };
+
+  const renderLoginScreen = () => {
+    return (
+      <div className={`min-h-screen w-full flex flex-col items-center justify-center p-4 relative transition-colors duration-300 ${
+        theme === 'dark' 
+          ? 'bg-zinc-950 bg-radial-[circle_at_top,_var(--tw-gradient-stops)] from-zinc-900 via-zinc-950 to-zinc-950 text-white' 
+          : 'bg-zinc-50 bg-radial-[circle_at_top,_var(--tw-gradient-stops)] from-zinc-100 via-zinc-50 to-zinc-50 text-zinc-900'
+      }`}>
+        {/* Top Header Row with Theme Toggle */}
+        <div className="absolute top-6 right-6 flex items-center gap-2 z-10">
+          <button
+            onClick={toggleTheme}
+            className={`p-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center border ${
+              theme === 'dark' 
+                ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-850 text-zinc-400 hover:text-white' 
+                : 'bg-white border-zinc-200 hover:bg-zinc-50 text-zinc-500 hover:text-zinc-900'
+            }`}
+            title={theme === 'dark' ? "Switch to light theme" : "Switch to dark theme"}
+          >
+            {theme === 'dark' ? <Sun className="w-4.5 h-4.5 text-amber-400" /> : <Moon className="w-4.5 h-4.5" />}
+          </button>
+        </div>
+
+        {/* Logo and Branding */}
+        <div className="flex flex-col items-center gap-3 mb-8 text-center animate-fadeIn">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-white shadow-xl shadow-indigo-500/20">
+            <Sparkles className="w-6 h-6 animate-pulse" />
+          </div>
+          <div>
+            <h1 className="font-extrabold text-2xl tracking-tight bg-gradient-to-r from-zinc-900 via-zinc-750 to-zinc-900 dark:from-white dark:via-zinc-200 dark:to-white bg-clip-text text-transparent">
+              ShopEase
+            </h1>
+            <p className={`text-xs mt-1 font-medium ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
+              24/7 AI Shopping Assistant & Customer Support
+            </p>
+          </div>
+        </div>
+
+        {/* Auth Card Container */}
+        <div 
+          className={`border rounded-2xl max-w-md w-full p-8 shadow-2xl transition-all duration-300 backdrop-blur-md ${
+            theme === 'dark' ? 'bg-zinc-900/80 border-zinc-850 text-white' : 'bg-white/80 border-zinc-200/80 text-zinc-900'
+          }`}
+        >
+          {/* Modal Tabs */}
+          <div className="flex border-b mb-6 dark:border-zinc-800 border-zinc-150">
+            <button
+              id="page-auth-tab-signin-btn"
+              type="button"
+              onClick={() => {
+                setAuthTab('signin');
+                setAuthError(null);
+                setShowPassword(false);
+              }}
+              className={`flex-1 pb-3.5 text-sm font-bold border-b-2 transition-all cursor-pointer ${
+                authTab === 'signin'
+                  ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                  : 'border-transparent text-zinc-450 hover:text-zinc-550'
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              id="page-auth-tab-signup-btn"
+              type="button"
+              onClick={() => {
+                setAuthTab('signup');
+                setAuthError(null);
+                setShowPassword(false);
+              }}
+              className={`flex-1 pb-3.5 text-sm font-bold border-b-2 transition-all cursor-pointer ${
+                authTab === 'signup'
+                  ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                  : 'border-transparent text-zinc-450 hover:text-zinc-550'
+              }`}
+            >
+              Sign Up
+            </button>
+          </div>
+
+          {/* Auth Form */}
+          <form onSubmit={authTab === 'signin' ? handleLogin : handleRegister} className="space-y-4">
+            {authError && (
+              <div className="p-3.5 bg-red-950/20 border border-red-900/40 text-red-400 rounded-xl text-xs font-semibold leading-relaxed">
+                {authError}
+              </div>
+            )}
+
+            {authTab === 'signup' && (
+              <div>
+                <label className={`block text-xs font-bold mb-1.5 ${theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'}`}>Username</label>
+                <input
+                  id="page-auth-username-input"
+                  type="text"
+                  required
+                  value={authUsername}
+                  onChange={(e) => setAuthUsername(e.target.value)}
+                  placeholder="Choose a username"
+                  className={`w-full px-3.5 py-2.5 text-xs border rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-600 ${
+                    theme === 'dark' 
+                      ? 'bg-zinc-950 border-zinc-800 text-white placeholder-zinc-650' 
+                      : 'bg-zinc-50 border-zinc-200 text-zinc-900 placeholder-zinc-400'
+                  }`}
+                />
+              </div>
+            )}
+
+            <div>
+              <label className={`block text-xs font-bold mb-1.5 ${theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'}`}>Email Address</label>
+              <input
+                id="page-auth-email-input"
+                type="email"
+                required
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                placeholder="you@example.com"
+                className={`w-full px-3.5 py-2.5 text-xs border rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-600 ${
+                  theme === 'dark' 
+                    ? 'bg-zinc-950 border-zinc-800 text-white placeholder-zinc-655' 
+                    : 'bg-zinc-50 border-zinc-200 text-zinc-900 placeholder-zinc-400'
+                }`}
+              />
+            </div>
+
+            <div>
+              <label className={`block text-xs font-bold mb-1.5 ${theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'}`}>Password</label>
+              <div className="relative">
+                <input
+                  id="page-auth-password-input"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className={`w-full pl-3.5 pr-10 py-2.5 text-xs border rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-600 ${
+                    theme === 'dark' 
+                      ? 'bg-zinc-950 border-zinc-800 text-white placeholder-zinc-655' 
+                      : 'bg-zinc-50 border-zinc-200 text-zinc-900 placeholder-zinc-400'
+                  }`}
+                />
+                <button
+                  id="page-toggle-auth-password-visibility-btn"
+                  type="button"
+                  onClick={() => setShowPassword(prev => !prev)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-750 dark:hover:text-zinc-350 transition-colors cursor-pointer"
+                  title={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              id="page-auth-submit-btn"
+              type="submit"
+              disabled={authLoading}
+              className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold cursor-pointer transition-all shadow-lg shadow-indigo-600/15 active:scale-[0.98] flex items-center justify-center gap-2 select-none"
+            >
+              {authLoading ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  {authTab === 'signin' ? 'Signing In...' : 'Signing Up...'}
+                </>
+              ) : (
+                authTab === 'signin' ? 'Sign In' : 'Sign Up'
+              )}
+            </button>
+          </form>
+
+          {/* Secure SSL Shield Note */}
+          <div className="mt-6 flex items-center justify-center gap-1.5 text-[10px] text-zinc-450 font-medium">
+            <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />
+            <span>Secure 256-bit SSL Encrypted Connection</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  if (!mounted) {
+    return (
+      <div className={`min-h-screen w-full flex items-center justify-center transition-colors duration-300 ${theme === 'dark' ? 'bg-zinc-950 text-zinc-400' : 'bg-zinc-50 text-zinc-500'}`}>
+        <RefreshCw className="w-6 h-6 animate-spin text-indigo-650" />
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return renderLoginScreen();
+  }
 
   return (
     <main className={`flex flex-col min-h-screen font-sans transition-colors duration-300 ${theme === 'dark' ? 'bg-zinc-950 text-zinc-100' : 'bg-zinc-50 text-zinc-900'}`}>
