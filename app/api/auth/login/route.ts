@@ -9,7 +9,7 @@ export async function POST(request: Request) {
   try {
     const { email, password } = await request.json();
 
-    // 1. Basic validation
+ 
     if (!email || !password) {
       return NextResponse.json(
         { error: 'Email and password are required.' },
