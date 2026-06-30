@@ -28,7 +28,7 @@ export async function POST(request: Request) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          question: finalQuestion,
+          chat: finalQuestion,
           order_id: finalOrderId,
           thread_id: thread_id
         }),
