@@ -214,6 +214,7 @@ export default function Home() {
 
   // Authentication States
   const [currentUser, setCurrentUser] = useState<{ id: number; username: string; email: string; token: string } | null>(null);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authTab, setAuthTab] = useState<'signin' | 'signup'>('signin');
   const [authUsername, setAuthUsername] = useState('');
@@ -222,6 +223,18 @@ export default function Home() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  const fetchWalletBalance = async (username: string) => {
+    try {
+      const res = await fetch(`/api/user/wallet?username=${encodeURIComponent(username)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setWalletBalance(data.balance);
+      }
+    } catch (err) {
+      console.error('Failed to fetch wallet balance:', err);
+    }
+  };
 
   // Derived states resolved dynamically inside renderChatWindow
 
@@ -232,7 +245,9 @@ export default function Home() {
     const savedUser = localStorage.getItem('shopease_user');
     if (savedUser) {
       try {
-        setCurrentUser(JSON.parse(savedUser));
+        const parsed = JSON.parse(savedUser);
+        setCurrentUser(parsed);
+        fetchWalletBalance(parsed.username);
       } catch (err) {
         console.error('Failed to parse saved user:', err);
       }
@@ -626,7 +641,9 @@ export default function Home() {
           },
           body: JSON.stringify({
             chat: text,
-            thread_id: currentSessionId
+            thread_id: currentSessionId,
+            username: currentUser?.username || 'Guest',
+            shipping_address: currentUser ? '123 E-Commerce Way, Tech City' : ''
           }),
         });
 
@@ -745,6 +762,10 @@ export default function Home() {
           }
           return s;
         }));
+
+        if (currentUser) {
+          fetchWalletBalance(currentUser.username);
+        }
       } catch (err: any) {
         console.error('Support Chat API request failed:', err);
         const mockReplies = [
@@ -893,6 +914,7 @@ export default function Home() {
       };
       setCurrentUser(userSession);
       localStorage.setItem('shopease_user', JSON.stringify(userSession));
+      fetchWalletBalance(data.user.username);
       setToastMessage(`Welcome back, ${data.user.username}!`);
       setIsAuthModalOpen(false);
       setAuthEmail('');
@@ -907,6 +929,7 @@ export default function Home() {
 
   const handleLogout = () => {
     setCurrentUser(null);
+    setWalletBalance(null);
     localStorage.removeItem('shopease_user');
     setToastMessage('Logged out successfully!');
   };
@@ -944,7 +967,9 @@ export default function Home() {
         body: JSON.stringify({
           user_id: currentUser.id.toString(),
           product_name: buyProduct.name,
-          price: buyProduct.price
+          price: buyProduct.price,
+          username: currentUser.username,
+          shipping_address: shippingAddress
         }),
       });
 
@@ -1622,7 +1647,16 @@ export default function Home() {
 
           {/* Auth Controls */}
           {currentUser ? (
-            <div className="flex items-center gap-2 border-l pl-3 dark:border-zinc-800 border-zinc-200">
+            <div className="flex items-center gap-2.5 border-l pl-3 dark:border-zinc-800 border-zinc-200">
+              {walletBalance !== null && (
+                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-lg border ${
+                  theme === 'dark'
+                    ? 'bg-zinc-800/80 border-zinc-700 text-zinc-300'
+                    : 'bg-zinc-100 border-zinc-200 text-zinc-650'
+                }`}>
+                  💳 Wallet: ₹{walletBalance.toLocaleString('en-IN')}
+                </span>
+              )}
               <span className={`text-xs font-semibold max-w-[120px] truncate ${theme === 'dark' ? 'text-zinc-200' : 'text-zinc-700'}`}>
                 Hi, {currentUser.username}
               </span>

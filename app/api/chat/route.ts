@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server';
+import { MongoClient } from 'mongodb';
+
+const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://omthakur:sxB1fxPqt50ddAT5@cluster0.lv5os6g.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 
 export async function POST(request: Request) {
   try {
@@ -43,6 +46,68 @@ export async function POST(request: Request) {
     }
 
     if (hfSuccess && hfData) {
+      // Run the Ticket-to-Refund transition processor in the database
+      let dbClient: MongoClient | null = null;
+      try {
+        dbClient = new MongoClient(MONGO_URI);
+        await dbClient.connect();
+        const db = dbClient.db('shopease_db');
+        const ticketsCollection = db.collection('tickets');
+        const ordersCollection = db.collection('orders');
+        const walletsCollection = db.collection('wallets');
+
+        // Find resolved tickets where refund has not been processed yet
+        const pendingTickets = await ticketsCollection.find({
+          status: 'Resolved',
+          refund_processed: { $ne: true }
+        }).toArray();
+
+        for (const ticket of pendingTickets) {
+          const tktOrderId = ticket.order_id;
+          if (tktOrderId) {
+            const orderDoc = await ordersCollection.findOne({ order_id: tktOrderId });
+            if (orderDoc && orderDoc.status !== 'Refunded') {
+              // Update order status in orders collection
+              await ordersCollection.updateOne(
+                { _id: orderDoc._id },
+                { $set: { status: 'Refunded', refunded_at: new Date() } }
+              );
+
+              // Increment balance in wallets collection and store user profile address
+              const refundAmount = Number(orderDoc.price) || 0;
+              const orderUserId = orderDoc.user_id || thread_id || 'Guest';
+              const orderUsername = orderDoc.username || 'Guest';
+              const orderAddress = orderDoc.shipping_address || '123 E-Commerce Way, Tech City';
+
+              await walletsCollection.updateOne(
+                { username: orderUsername },
+                {
+                  $inc: { balance: refundAmount },
+                  $set: {
+                    user_id: orderUserId,
+                    shipping_address: orderAddress,
+                    updated_at: new Date()
+                  }
+                },
+                { upsert: true }
+              );
+            }
+          }
+
+          // Mark ticket as processed
+          await ticketsCollection.updateOne(
+            { _id: ticket._id },
+            { $set: { refund_processed: true } }
+          );
+        }
+      } catch (dbErr) {
+        console.error('Failed to run dynamic refund processor:', dbErr);
+      } finally {
+        if (dbClient) {
+          await dbClient.close();
+        }
+      }
+
       return NextResponse.json(hfData);
     }
 

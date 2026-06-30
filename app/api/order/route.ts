@@ -38,7 +38,48 @@ function findMatchingProducts(query: string): any[] {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { chat, thread_id } = body;
+    const { chat, thread_id, user_id, product_name, price, username, shipping_address } = body;
+
+    // Direct UI Checkout Modal handling
+    if (user_id && product_name && price) {
+      let client: MongoClient | null = null;
+      try {
+        client = new MongoClient(MONGO_URI);
+        await client.connect();
+        const db = client.db('shopease_db');
+        const ordersCollection = db.collection('orders');
+
+        const mockOrderId = `ORD-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+        const orderData = {
+          order_id: mockOrderId,
+          user_id: user_id,
+          product_name: product_name,
+          price: Number(price),
+          status: 'Placed',
+          username: username || 'Guest',
+          shipping_address: shipping_address || '123 E-Commerce Way, Tech City',
+          created_at: new Date()
+        };
+
+        const result = await ordersCollection.insertOne(orderData);
+        return NextResponse.json({
+          _id: result.insertedId.toString(),
+          order_id: mockOrderId,
+          user_id: user_id,
+          product_name: product_name,
+          price: Number(price),
+          status: 'Placed',
+          created_at: orderData.created_at.toISOString()
+        });
+      } catch (dbErr: any) {
+        console.error('Direct checkout insert failed:', dbErr);
+        return NextResponse.json({ error: dbErr.message }, { status: 500 });
+      } finally {
+        if (client) {
+          await client.close();
+        }
+      }
+    }
 
     if (!chat || !thread_id) {
       return NextResponse.json(
@@ -118,6 +159,8 @@ export async function POST(request: Request) {
           product_name: targetProduct.name,
           price: Number(targetProduct.price),
           status: 'Placed',
+          username: username || 'Guest',
+          shipping_address: shipping_address || '123 E-Commerce Way, Tech City',
           created_at: new Date()
         };
         
@@ -129,6 +172,8 @@ export async function POST(request: Request) {
           product_name: targetProduct.name,
           price: Number(targetProduct.price),
           status: 'Placed',
+          username: username || 'Guest',
+          shipping_address: shipping_address || '123 E-Commerce Way, Tech City',
           created_at: orderData.created_at.toISOString()
         };
         orderSuccess = true;

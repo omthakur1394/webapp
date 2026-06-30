@@ -21,10 +21,8 @@ export async function GET(request: Request) {
     const db = client.db('shopease_db');
     const ordersCollection = db.collection('orders');
 
-    // Find by order_id (e.g. 'ORD-48F389D2')
     let order = await ordersCollection.findOne({ order_id: orderId });
 
-    // Fallback to find by ObjectId if order_id is a 24-character hex string
     if (!order && ObjectId.isValid(orderId)) {
       order = await ordersCollection.findOne({ _id: new ObjectId(orderId) });
     }
@@ -34,6 +32,30 @@ export async function GET(request: Request) {
         { error: 'Order not found' },
         { status: 404 }
       );
+    }
+
+    // Dynamic enrichment if database fields are missing
+    const usernameParam = searchParams.get('username');
+    const addressParam = searchParams.get('shipping_address');
+
+    let needsUpdate = false;
+    const updateFields: any = {};
+
+    if (!order.username && usernameParam) {
+      updateFields.username = usernameParam;
+      needsUpdate = true;
+    }
+    if (!order.shipping_address && addressParam) {
+      updateFields.shipping_address = addressParam || '123 E-Commerce Way, Tech City';
+      needsUpdate = true;
+    }
+
+    if (needsUpdate) {
+      await ordersCollection.updateOne(
+        { _id: order._id },
+        { $set: updateFields }
+      );
+      order = { ...order, ...updateFields };
     }
 
     return NextResponse.json(order);
