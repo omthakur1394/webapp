@@ -3,11 +3,14 @@ import { NextResponse } from 'next/server';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { chat, thread_id } = body;
+    const { chat, question, order_id, thread_id } = body;
 
-    if (!chat || !thread_id) {
+    const finalQuestion = question || chat;
+    const finalOrderId = order_id || "";
+
+    if (!finalQuestion || !thread_id) {
       return NextResponse.json(
-        { error: 'Missing chat message or thread_id' },
+        { error: 'Missing chat message/question or thread_id' },
         { status: 400 }
       );
     }
@@ -18,12 +21,17 @@ export async function POST(request: Request) {
     let hfData: any = null;
 
     try {
+      // Forward the new schema to FastAPI
       const response = await fetch(hfApiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ chat, thread_id }),
+        body: JSON.stringify({
+          question: finalQuestion,
+          order_id: finalOrderId,
+          thread_id: thread_id
+        }),
       });
 
       if (response.ok) {

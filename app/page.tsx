@@ -706,15 +706,18 @@ export default function Home() {
       setIsLoading(true);
 
       try {
+        const orderMatch = text.match(/ORD-[A-Z0-9]{8}/i) || text.match(/\b\d{5,}\b/);
+        const extractedOrderId = orderMatch ? orderMatch[0].toUpperCase() : '';
+
         const response = await fetch('/api/chat', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            chat: text,
-            thread_id: currentSessionId,
-            type: 'support'
+            question: text,
+            order_id: extractedOrderId,
+            thread_id: currentSessionId
           })
         });
 
