@@ -223,6 +223,98 @@ export default function Home() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [activeAccountTab, setActiveAccountTab] = useState<'orders' | 'addresses'>('orders');
+  const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
+  const [userOrders, setUserOrders] = useState<any[]>([]);
+  const [isOrdersLoading, setIsOrdersLoading] = useState(false);
+  const [isAddressesLoading, setIsAddressesLoading] = useState(false);
+
+  const [newAddressLine, setNewAddressLine] = useState('');
+  const [newCity, setNewCity] = useState('');
+  const [newPostalCode, setNewPostalCode] = useState('');
+  const [newAddressIsDefault, setNewAddressIsDefault] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+
+  const fetchUserAddresses = async (userId: string, username: string) => {
+    setIsAddressesLoading(true);
+    try {
+      const res = await fetch(`/api/user/addresses?user_id=${userId}&username=${username}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSavedAddresses(data);
+        const defaultAddr = data.find((a: any) => a.is_default);
+        if (defaultAddr) {
+          setShippingAddress(`${defaultAddr.address_line}, ${defaultAddr.city} (${defaultAddr.postal_code})`);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching addresses:', err);
+    } finally {
+      setIsAddressesLoading(false);
+    }
+  };
+
+  const fetchUserOrders = async (userId: string, username: string) => {
+    setIsOrdersLoading(true);
+    try {
+      const res = await fetch(`/api/user/orders?user_id=${userId}&username=${username}`);
+      if (res.ok) {
+        const data = await res.json();
+        setUserOrders(data);
+      }
+    } catch (err) {
+      console.error('Error fetching orders:', err);
+    } finally {
+      setIsOrdersLoading(false);
+    }
+  };
+
+  const handleSaveAddress = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !newAddressLine.trim() || !newCity.trim() || !newPostalCode.trim()) return;
+    try {
+      const res = await fetch('/api/user/addresses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          address_id: editingAddressId,
+          user_id: currentUser.id.toString(),
+          username: currentUser.username,
+          address_line: newAddressLine,
+          city: newCity,
+          postal_code: newPostalCode,
+          is_default: newAddressIsDefault
+        })
+      });
+      if (res.ok) {
+        setToastMessage(editingAddressId ? 'Address updated!' : 'Address added!');
+        setNewAddressLine('');
+        setNewCity('');
+        setNewPostalCode('');
+        setNewAddressIsDefault(false);
+        setEditingAddressId(null);
+        fetchUserAddresses(currentUser.id.toString(), currentUser.username);
+      }
+    } catch (err) {
+      console.error('Error saving address:', err);
+    }
+  };
+
+  const handleDeleteAddress = async (addressId: string) => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch(`/api/user/addresses?address_id=${addressId}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        setToastMessage('Address deleted.');
+        fetchUserAddresses(currentUser.id.toString(), currentUser.username);
+      }
+    } catch (err) {
+      console.error('Error deleting address:', err);
+    }
+  };
 
   const fetchWalletBalance = async (username: string) => {
     try {
@@ -248,6 +340,8 @@ export default function Home() {
         const parsed = JSON.parse(savedUser);
         setCurrentUser(parsed);
         fetchWalletBalance(parsed.username);
+        fetchUserAddresses(parsed.id.toString(), parsed.username);
+        fetchUserOrders(parsed.id.toString(), parsed.username);
       } catch (err) {
         console.error('Failed to parse saved user:', err);
       }
@@ -669,6 +763,10 @@ export default function Home() {
           }
           return s;
         }));
+
+        if (currentUser) {
+          fetchUserOrders(currentUser.id.toString(), currentUser.username);
+        }
       } catch (err) {
         console.error('Sales Assistant failed:', err);
         const botMessage: Message = {
@@ -765,6 +863,7 @@ export default function Home() {
 
         if (currentUser) {
           fetchWalletBalance(currentUser.username);
+          fetchUserOrders(currentUser.id.toString(), currentUser.username);
         }
       } catch (err: any) {
         console.error('Support Chat API request failed:', err);
@@ -915,6 +1014,8 @@ export default function Home() {
       setCurrentUser(userSession);
       localStorage.setItem('shopease_user', JSON.stringify(userSession));
       fetchWalletBalance(data.user.username);
+      fetchUserAddresses(data.user.id.toString(), data.user.username);
+      fetchUserOrders(data.user.id.toString(), data.user.username);
       setToastMessage(`Welcome back, ${data.user.username}!`);
       setIsAuthModalOpen(false);
       setAuthEmail('');
@@ -930,6 +1031,8 @@ export default function Home() {
   const handleLogout = () => {
     setCurrentUser(null);
     setWalletBalance(null);
+    setSavedAddresses([]);
+    setUserOrders([]);
     localStorage.removeItem('shopease_user');
     setToastMessage('Logged out successfully!');
   };
@@ -983,6 +1086,9 @@ export default function Home() {
       setIsOrderConfirmed(true);
       setCartCount(prev => prev + 1);
       setToastMessage(`Order placed successfully for ${buyProduct.name}!`);
+      if (currentUser) {
+        fetchUserOrders(currentUser.id.toString(), currentUser.username);
+      }
     } catch (err: any) {
       console.error('Order placement API failed:', err);
       setToastMessage('Order placed locally due to network issues.');
@@ -992,6 +1098,9 @@ export default function Home() {
       setPlacedOrderDetailsId(mockDetailsId);
       setIsOrderConfirmed(true);
       setCartCount(prev => prev + 1);
+      if (currentUser) {
+        fetchUserOrders(currentUser.id.toString(), currentUser.username);
+      }
     } finally {
       setIsOrderPlacing(false);
     }
@@ -1661,6 +1770,22 @@ export default function Home() {
                 Hi, {currentUser.username}
               </span>
               <button
+                onClick={() => {
+                  if (currentUser) {
+                    fetchUserAddresses(currentUser.id.toString(), currentUser.username);
+                    fetchUserOrders(currentUser.id.toString(), currentUser.username);
+                  }
+                  setIsAccountModalOpen(true);
+                }}
+                className={`text-[11px] font-semibold px-2 py-1 rounded-lg border transition-all cursor-pointer whitespace-nowrap ${
+                  theme === 'dark'
+                    ? 'border-zinc-700 hover:border-zinc-600 hover:bg-zinc-800 text-zinc-300'
+                    : 'border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50 text-zinc-600'
+                }`}
+              >
+                My Account
+              </button>
+              <button
                 id="auth-logout-btn"
                 onClick={handleLogout}
                 className="text-[11px] font-semibold text-red-500 hover:text-red-400 cursor-pointer transition-colors"
@@ -2257,6 +2382,273 @@ export default function Home() {
         </>
       )}
 
+      {/* My Account Modal */}
+      {isAccountModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-fadeIn animate-duration-200">
+          <div 
+            id="account-modal"
+            className={`border rounded-2xl max-w-3xl w-full p-6 shadow-2xl transition-all duration-200 relative flex flex-col max-h-[85vh] ${
+              theme === 'dark' ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-zinc-200 text-zinc-900'
+            }`}
+          >
+            {/* Close Button */}
+            <button
+              onClick={() => {
+                setIsAccountModalOpen(false);
+                setEditingAddressId(null);
+                setNewAddressLine('');
+                setNewCity('');
+                setNewPostalCode('');
+                setNewAddressIsDefault(false);
+              }}
+              className={`absolute top-4 right-4 p-1.5 rounded-lg transition-colors cursor-pointer ${
+                theme === 'dark' ? 'hover:bg-zinc-800 text-zinc-400 hover:text-white' : 'hover:bg-zinc-100 text-zinc-500 hover:text-zinc-900'
+              }`}
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Modal Title */}
+            <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+              👤 User Account Dashboard
+            </h2>
+
+            {/* Modal Tabs */}
+            <div className="flex border-b mb-4 dark:border-zinc-800 border-zinc-150">
+              <button
+                onClick={() => setActiveAccountTab('orders')}
+                className={`py-2 px-4 border-b-2 text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
+                  activeAccountTab === 'orders'
+                    ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                    : 'border-transparent text-zinc-500 hover:text-zinc-700'
+                }`}
+              >
+                📋 Order History
+              </button>
+              <button
+                onClick={() => setActiveAccountTab('addresses')}
+                className={`py-2 px-4 border-b-2 text-xs font-bold transition-colors whitespace-nowrap cursor-pointer ${
+                  activeAccountTab === 'addresses'
+                    ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+                    : 'border-transparent text-zinc-500 hover:text-zinc-700'
+                }`}
+              >
+                📍 Saved Addresses
+              </button>
+            </div>
+
+            {/* Tab Contents */}
+            <div className="overflow-y-auto pr-1 flex-1 py-1">
+              {activeAccountTab === 'orders' && (
+                <div className="space-y-4">
+                  {isOrdersLoading ? (
+                    <div className="text-center py-6 text-xs text-zinc-500">Loading order history...</div>
+                  ) : userOrders.length === 0 ? (
+                    <div className="text-center py-6 text-xs text-zinc-500">No orders placed yet.</div>
+                  ) : (
+                    userOrders.map((order) => (
+                      <div
+                        key={order._id}
+                        className={`p-4 border rounded-xl shadow-xs transition-all ${
+                          theme === 'dark' ? 'bg-zinc-850 border-zinc-850/45' : 'bg-zinc-50 border-zinc-200'
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 mb-2 pb-2 border-b dark:border-zinc-800 border-zinc-200">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-xs text-indigo-600 dark:text-indigo-400">
+                              {order.order_id}
+                            </span>
+                            <span className="text-[10px] text-zinc-400">
+                              {new Date(order.created_at).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            order.status === 'Placed'
+                              ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                              : order.status === 'Refunded'
+                              ? 'bg-rose-500/10 text-rose-500 border-rose-500/20'
+                              : order.status === 'Returned'
+                              ? 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                              : 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20'
+                          }`}>
+                            {order.status}
+                          </span>
+                        </div>
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-zinc-500">Product:</span>
+                            <span className="font-medium text-right max-w-[280px] truncate">{order.product_name}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-zinc-500">Price:</span>
+                            <span className="font-bold">₹{Number(order.price).toLocaleString('en-IN')}</span>
+                          </div>
+                          {order.shipping_address && (
+                            <div className="flex justify-between text-xs">
+                              <span className="text-zinc-500">Ship To:</span>
+                              <span className="italic text-zinc-400 text-right max-w-[280px] truncate">{order.shipping_address}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {activeAccountTab === 'addresses' && (
+                <div className="space-y-6">
+                  {/* Save/Add Address Form */}
+                  <form onSubmit={handleSaveAddress} className={`p-4 border rounded-xl space-y-3 ${
+                    theme === 'dark' ? 'bg-zinc-850/50 border-zinc-800' : 'bg-zinc-50 border-zinc-200'
+                  }`}>
+                    <h3 className="text-xs font-bold">
+                      {editingAddressId ? '✏️ Edit Saved Address' : '➕ Add New Address'}
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="md:col-span-2">
+                        <label className="block text-[10px] text-zinc-400 font-bold mb-1">Street Address</label>
+                        <input
+                          type="text"
+                          required
+                          value={newAddressLine}
+                          onChange={(e) => setNewAddressLine(e.target.value)}
+                          placeholder="e.g. 123 Main St, Apt 4"
+                          className={`w-full px-3 py-1.5 border rounded-lg text-xs outline-none transition-all ${
+                            theme === 'dark' ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-white border-zinc-200'
+                          }`}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-zinc-400 font-bold mb-1">City</label>
+                        <input
+                          type="text"
+                          required
+                          value={newCity}
+                          onChange={(e) => setNewCity(e.target.value)}
+                          placeholder="e.g. Springfield"
+                          className={`w-full px-3 py-1.5 border rounded-lg text-xs outline-none transition-all ${
+                            theme === 'dark' ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-white border-zinc-200'
+                          }`}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                      <div className="flex gap-4">
+                        <div className="w-[120px]">
+                          <label className="block text-[10px] text-zinc-400 font-bold mb-1">Postal Code</label>
+                          <input
+                            type="text"
+                            required
+                            value={newPostalCode}
+                            onChange={(e) => setNewPostalCode(e.target.value)}
+                            placeholder="e.g. 627001"
+                            className={`w-full px-3 py-1.5 border rounded-lg text-xs outline-none transition-all ${
+                              theme === 'dark' ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-white border-zinc-200'
+                            }`}
+                          />
+                        </div>
+                        <label className="flex items-center gap-1.5 self-end pb-2.5 cursor-pointer text-xs select-none">
+                          <input
+                            type="checkbox"
+                            checked={newAddressIsDefault}
+                            onChange={(e) => setNewAddressIsDefault(e.target.checked)}
+                            className="w-3.5 h-3.5 accent-indigo-600 rounded cursor-pointer"
+                          />
+                          Set as Default
+                        </label>
+                      </div>
+                      <div className="flex gap-2 self-end pb-1.5">
+                        {editingAddressId && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingAddressId(null);
+                              setNewAddressLine('');
+                              setNewCity('');
+                              setNewPostalCode('');
+                              setNewAddressIsDefault(false);
+                            }}
+                            className={`px-3 py-1.5 border rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                              theme === 'dark' ? 'border-zinc-700 text-zinc-300 hover:bg-zinc-800' : 'border-zinc-200 text-zinc-650 hover:bg-zinc-100'
+                            }`}
+                          >
+                            Cancel
+                          </button>
+                        )}
+                        <button
+                          type="submit"
+                          className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs cursor-pointer shadow-md shadow-indigo-650/10 active:scale-[0.98] transition-all"
+                        >
+                          {editingAddressId ? 'Save Changes' : 'Add Address'}
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+
+                  {/* Address List */}
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-bold">📍 Saved Locations</h3>
+                    {isAddressesLoading ? (
+                      <div className="text-center py-4 text-xs text-zinc-500">Loading saved locations...</div>
+                    ) : savedAddresses.length === 0 ? (
+                      <div className="text-center py-4 text-xs text-zinc-500">No saved addresses found.</div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {savedAddresses.map((addr) => (
+                          <div
+                            key={addr._id}
+                            className={`p-3 border rounded-xl relative flex flex-col justify-between gap-3 transition-all ${
+                              addr.is_default
+                                ? 'border-indigo-500/50 bg-indigo-500/[0.02] dark:bg-indigo-500/[0.01]'
+                                : theme === 'dark' ? 'bg-zinc-850 border-zinc-800' : 'bg-white border-zinc-200'
+                            }`}
+                          >
+                            <div>
+                              <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                                <span className="font-bold text-xs">{addr.address_line}</span>
+                                {addr.is_default && (
+                                  <span className="text-[8px] font-extrabold px-1.5 py-0.5 bg-indigo-600 text-white uppercase rounded-full">
+                                    Default
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-zinc-400">
+                                {addr.city} ({addr.postal_code})
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 border-t pt-2 dark:border-zinc-800 border-zinc-150 justify-end">
+                              <button
+                                onClick={() => {
+                                  setEditingAddressId(addr._id);
+                                  setNewAddressLine(addr.address_line);
+                                  setNewCity(addr.city);
+                                  setNewPostalCode(addr.postal_code);
+                                  setNewAddressIsDefault(addr.is_default);
+                                }}
+                                className="text-[10px] text-indigo-500 hover:text-indigo-400 font-bold transition-colors cursor-pointer"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteAddress(addr._id)}
+                                className="text-[10px] text-red-500 hover:text-red-400 font-bold transition-colors cursor-pointer"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Glassmorphic Authentication Modal */}
       {isAuthModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-fadeIn animate-duration-200">
@@ -2451,6 +2843,31 @@ export default function Home() {
                         theme === 'dark' ? 'bg-zinc-950 border-zinc-800 text-white placeholder-zinc-650' : 'bg-zinc-50 border-zinc-200 text-zinc-900 placeholder-zinc-400'
                       }`}
                     />
+                    {savedAddresses.length > 0 && (
+                      <div className="mt-2 space-y-1.5">
+                        <label className={`block text-[10px] font-bold ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                          Or select a saved location:
+                        </label>
+                        <div className="flex flex-wrap gap-1.5 max-h-[85px] overflow-y-auto pr-1 py-0.5">
+                          {savedAddresses.map((addr) => (
+                            <button
+                              key={addr._id}
+                              type="button"
+                              onClick={() => setShippingAddress(`${addr.address_line}, ${addr.city} (${addr.postal_code})`)}
+                              className={`px-2.5 py-1 text-[10px] font-semibold border rounded-lg transition-all cursor-pointer truncate max-w-[200px] ${
+                                shippingAddress === `${addr.address_line}, ${addr.city} (${addr.postal_code})`
+                                  ? 'bg-indigo-600/10 border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                                  : theme === 'dark'
+                                  ? 'bg-zinc-850 border-zinc-800 hover:border-zinc-700 text-zinc-300'
+                                  : 'bg-zinc-100 border-zinc-200 hover:border-zinc-300 text-zinc-650'
+                              }`}
+                            >
+                              {addr.address_line}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <button
