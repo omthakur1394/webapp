@@ -235,12 +235,6 @@ export default function AdminPage() {
                 >
                   {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : 'Enter Dashboard'}
                 </button>
-              </form>
-
-              <div className="mt-6 border-t border-zinc-850 pt-4 flex flex-wrap gap-4 justify-between text-[10px] text-zinc-500">
-                <span>📍 Mumbai Hub (admin@1)</span>
-                <span>📍 Nagpur Hub (admain@2)</span>
-              </div>
             </div>
           </div>
         ) : (
