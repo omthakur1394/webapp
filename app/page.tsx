@@ -1389,7 +1389,7 @@ export default function Home() {
                       </button>
                     )}
                   </div>
-
+ 
                   {/* Timestamp */}
                   <span className={`text-[9px] font-medium px-1 flex items-center gap-1 ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'} ${isBot ? 'justify-start' : 'justify-end'}`}>
                     {formatTime(message.timestamp)}
@@ -2463,7 +2463,9 @@ export default function Home() {
                             </span>
                           </div>
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                            order.status === 'Placed'
+                            order.status === 'Delivered'
+                              ? 'bg-blue-500/10 text-blue-500 border-blue-500/20'
+                              : order.status === 'Placed'
                               ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
                               : order.status === 'Refunded'
                               ? 'bg-rose-500/10 text-rose-500 border-rose-500/20'

@@ -39,3 +39,37 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# ============================================================
+# Project-specific: Auto-generated & unwanted files
+# ============================================================
+
+# Architecture & documentation files (auto-generated)
+ARCHITECTURE.md
+ARCHITECTURE.html
+CLAUDE.md
+ShopEase_Architecture_Documentation.pdf
+
+# Draw.io diagram files
+*.drawio
+*.drawio.svg
+
+# Python PDF generator script (not needed in production)
+scripts/generate_pdf.py
+
+# OS & Editor artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Docker local build outputs
+.dist/
+
+# Local test & debug logs
+*.log
+logs/

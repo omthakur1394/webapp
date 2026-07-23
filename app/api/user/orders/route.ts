@@ -32,6 +32,24 @@ export async function GET(request: Request) {
       return NextResponse.json([]);
     }
 
+    // Automatically update orders placed > 7 days ago to 'Delivered'
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    await ordersCollection.updateMany(
+      {
+        status: 'Placed',
+        $or: [
+          { created_at: { $lte: sevenDaysAgo } },
+          { created_at: { $lte: sevenDaysAgo.toISOString() } }
+        ]
+      },
+      {
+        $set: {
+          status: 'Delivered',
+          delivered_at: new Date()
+        }
+      }
+    );
+
     const list = await ordersCollection.find(query).sort({ created_at: -1 }).toArray();
     return NextResponse.json(list);
   } catch (error: any) {

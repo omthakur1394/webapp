@@ -187,7 +187,7 @@ export async function POST(request: Request) {
 
       if (orderSuccess && orderDoc) {
         return NextResponse.json({
-          res: `Your order for the **${targetProduct.name}** has been successfully placed at a price of ₹${Number(targetProduct.price).toLocaleString('en-IN')}. \n\nOrder ID: ${orderDoc.order_id}. \n\nIf you have any further questions or need assistance, feel free to ask!`
+          res: `Your order for the **${targetProduct.name}** has been successfully placed at a price of ₹${Number(targetProduct.price).toLocaleString('en-IN')}. \n\nOrder ID: ${orderDoc.order_id}. \n\n📦 **Delivery Timeline**: Your order will be automatically delivered within 7 days. \n\nIf you have any further questions or need assistance, feel free to ask!`
         });
       }
     }
