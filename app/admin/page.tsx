@@ -235,6 +235,7 @@ export default function AdminPage() {
                 >
                   {loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : 'Enter Dashboard'}
                 </button>
+              </form>
             </div>
           </div>
         ) : (
