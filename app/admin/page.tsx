@@ -148,15 +148,21 @@ export default function AdminPage() {
 
   if (!mounted) return null;
 
-  const getOrderRegion = (shippingAddress: string) => {
-    const addr = (shippingAddress || '').toLowerCase();
+  const getOrderRegion = (order: any) => {
+    // 1. Prefer the explicit hub_region field saved at order time
+    if (order.hub_region && order.hub_region !== 'General Hub') {
+      if (order.hub_region.toLowerCase().includes('mumbai')) return 'Mumbai';
+      if (order.hub_region.toLowerCase().includes('nagpur')) return 'Nagpur';
+    }
+    // 2. Fall back to keyword-matching the shipping address
+    const addr = (order.shipping_address || '').toLowerCase();
     if (addr.includes('mumbai')) return 'Mumbai';
     if (addr.includes('nagpur')) return 'Nagpur';
     return 'Other';
   };
 
   const totalOrders = orders.length;
-  const regionalOrders = orders.filter(o => getOrderRegion(o.shipping_address) === admin?.region);
+  const regionalOrders = orders.filter(o => getOrderRegion(o) === admin?.region);
   const heldOrders = regionalOrders.filter(o => o.status === 'On Hold').length;
 
   return (
@@ -308,7 +314,7 @@ export default function AdminPage() {
                         </tr>
                       ) : (
                         orders.map((order) => {
-                          const orderRegion = getOrderRegion(order.shipping_address);
+                          const orderRegion = getOrderRegion(order);
                           const isRegional = orderRegion === admin.region;
 
                           return (

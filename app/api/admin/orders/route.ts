@@ -67,7 +67,13 @@ export async function POST(request: Request) {
     }
 
     const addr = (order.shipping_address || '').toLowerCase();
-    if (!addr.includes(region.toLowerCase())) {
+    const hubRegion = (order.hub_region || '').toLowerCase();
+    const regionLower = region.toLowerCase();
+
+    const regionMatchesAddress = addr.includes(regionLower);
+    const regionMatchesHub = hubRegion.includes(regionLower);
+
+    if (!regionMatchesAddress && !regionMatchesHub) {
       return NextResponse.json(
         { error: `Access Denied: You only have access to hold orders in the ${region} region.` },
         { status: 403 }
