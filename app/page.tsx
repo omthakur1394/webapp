@@ -202,6 +202,7 @@ export default function Home() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [buyProduct, setBuyProduct] = useState<Product | null>(null); // Order success modal target
   const [shippingAddress, setShippingAddress] = useState('');
+  const [selectedHub, setSelectedHub] = useState<'Mumbai Hub' | 'Nagpur Hub' | ''>('');
   const [isOrderConfirmed, setIsOrderConfirmed] = useState(false);
   const [placedOrderId, setPlacedOrderId] = useState('');
   const [placedOrderDetailsId, setPlacedOrderDetailsId] = useState('');
@@ -1048,6 +1049,7 @@ export default function Home() {
     e.stopPropagation();
     setBuyProduct(product);
     setShippingAddress('');
+    setSelectedHub('');
     setIsOrderConfirmed(false);
     setPlacedOrderId('');
     setPlacedOrderDetailsId('');
@@ -1072,7 +1074,8 @@ export default function Home() {
           product_name: buyProduct.name,
           price: buyProduct.price,
           username: currentUser.username,
-          shipping_address: shippingAddress
+          shipping_address: shippingAddress,
+          hub_region: selectedHub || 'General Hub'
         }),
       });
 
@@ -2833,14 +2836,45 @@ export default function Home() {
 
                 <form onSubmit={executeCheckout} className="space-y-4">
                   <div>
-                    <label className={`block text-xs font-bold mb-1.5 ${theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'}`}>Shipping Address</label>
+                    <label className={`block text-xs font-bold mb-1.5 ${theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                      Delivery Hub
+                    </label>
+
+                    {/* Hub Dropdown */}
+                    <select
+                      id="hub-region-select"
+                      required
+                      value={selectedHub}
+                      onChange={(e) => {
+                        const hub = e.target.value as 'Mumbai Hub' | 'Nagpur Hub' | '';
+                        setSelectedHub(hub);
+                        if (hub === 'Mumbai Hub') {
+                          setShippingAddress('123 Marine Drive, Mumbai, Maharashtra 400001');
+                        } else if (hub === 'Nagpur Hub') {
+                          setShippingAddress('45 Wardha Road, Nagpur, Maharashtra 440001');
+                        } else {
+                          setShippingAddress('');
+                        }
+                      }}
+                      className={`w-full px-3 py-2.5 text-xs border rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-600 mb-3 ${
+                        theme === 'dark' ? 'bg-zinc-950 border-zinc-800 text-white' : 'bg-zinc-50 border-zinc-200 text-zinc-900'
+                      }`}
+                    >
+                      <option value="">-- Select Delivery Hub --</option>
+                      <option value="Mumbai Hub">📍 Mumbai Hub</option>
+                      <option value="Nagpur Hub">📍 Nagpur Hub</option>
+                    </select>
+
+                    <label className={`block text-xs font-bold mb-1.5 ${theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'}`}>
+                      Shipping Address
+                    </label>
                     <textarea
                       id="shipping-address-input"
                       required
-                      rows={3}
+                      rows={2}
                       value={shippingAddress}
                       onChange={(e) => setShippingAddress(e.target.value)}
-                      placeholder="Enter full shipping delivery address..."
+                      placeholder="Address auto-fills from hub or type manually..."
                       className={`w-full px-3 py-2 text-xs border rounded-xl focus:outline-none focus:ring-1 focus:ring-indigo-600 ${
                         theme === 'dark' ? 'bg-zinc-950 border-zinc-800 text-white placeholder-zinc-650' : 'bg-zinc-50 border-zinc-200 text-zinc-900 placeholder-zinc-400'
                       }`}

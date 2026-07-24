@@ -53,7 +53,7 @@ function findMatchingProducts(query: string): any[] {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { chat, thread_id, user_id, product_name, price, username, shipping_address } = body;
+    const { chat, thread_id, user_id, product_name, price, username, shipping_address, hub_region } = body;
 
     // Direct UI Checkout Modal handling
     if (user_id && product_name && price) {
@@ -73,6 +73,7 @@ export async function POST(request: Request) {
           status: 'Placed',
           username: username || 'Guest',
           shipping_address: shipping_address || '123 E-Commerce Way, Tech City',
+          hub_region: hub_region || 'General Hub',
           created_at: new Date()
         };
 
