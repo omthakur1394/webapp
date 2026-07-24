@@ -3,11 +3,25 @@ import { MongoClient } from 'mongodb';
 import productsData from '../../data/products.json';
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://omthakur:sxB1fxPqt50ddAT5@cluster0.lv5os6g.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+const DEFAULT_HF_CHAT_URL = 'https://omthakur1394-shopease-self-rag.hf.space/chat';
+const HF_CHAT_URL = process.env.HF_API_CHAT_URL || process.env.HF_API_URL || DEFAULT_HF_CHAT_URL;
+const DEFAULT_HF_ORDER_URL = HF_CHAT_URL.match(/\/chat\/?$/i)
+  ? HF_CHAT_URL.replace(/\/chat\/?$/i, '/order')
+  : `${HF_CHAT_URL.replace(/\/+$/, '')}/order`;
+const HF_ORDER_URL = process.env.HF_API_ORDER_URL || process.env.HF_ORDER_URL || DEFAULT_HF_ORDER_URL;
+const HF_TOKEN = process.env.HF_TOKEN || process.env.HF_HUB_TOKEN || '';
 
 // Helper to search and match products by query keywords
 function findMatchingProducts(query: string): any[] {
+  const stopWords = new Set([
+    'the', 'and', 'for', 'with', 'from', 'this', 'that', 'your', 'have', 'been', 'just', 'want', 'need', 'good', 'buy', 'order', 'please', 'suggest', 'recommend', 'show', 'find', 'me', 'my', 'on', 'of', 'in', 'to', 'a', 'an', 'it', 'is', 'are', 'as', 'at', 'by', 'or', 'so', 'too', 'but'
+  ]);
+
   const cleanQuery = query.toLowerCase();
-  const words = cleanQuery.split(/\s+/).filter(w => w.length > 2);
+  const words = cleanQuery
+    .split(/\s+/)
+    .filter(w => w.length > 1 && !stopWords.has(w));
+
   if (words.length === 0) return [];
 
   const matches = (productsData as any[]).map(p => {
@@ -16,16 +30,17 @@ function findMatchingProducts(query: string): any[] {
     const catLower = p.category.toLowerCase();
     const descLower = (p.description || '').toLowerCase();
 
-    // Direct category matches get a high boost
+    // Direct category or product type matches get a high boost
     if (cleanQuery.includes(catLower)) {
       score += 10;
     }
 
     for (const word of words) {
-      if (nameLower.includes(word)) score += 5;
-      if (catLower.includes(word)) score += 3;
-      if (descLower.includes(word)) score += 1;
+      if (nameLower.includes(word)) score += 6;
+      if (catLower.includes(word)) score += 4;
+      if (descLower.includes(word)) score += 2;
     }
+
     return { product: p, score };
   })
   .filter(item => item.score > 0)
@@ -88,19 +103,24 @@ export async function POST(request: Request) {
       );
     }
 
-    const hfApiUrl = process.env.HF_API_URL || 'https://omthakur1394-shopease-self-rag.hf.space/chat';
-    const orderUrl = hfApiUrl.replace(/\/chat$/, '/order');
+    const hfApiUrl = HF_CHAT_URL;
+    const orderUrl = HF_ORDER_URL;
 
     let hfSuccess = false;
     let hfData: any = null;
 
     // Try forwarding to the Hugging Face FastAPI /order endpoint
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (HF_TOKEN) {
+        headers.Authorization = `Bearer ${HF_TOKEN}`;
+      }
+
       const response = await fetch(orderUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({ chat, thread_id }),
       });
 
@@ -108,6 +128,8 @@ export async function POST(request: Request) {
         hfData = await response.json();
         hfSuccess = true;
         console.log("Placed order directly via FastAPI endpoint /order");
+      } else {
+        console.warn('HF Order API returned status', response.status);
       }
     } catch (fetchErr) {
       console.error('HF Order API fetch failed:', fetchErr);
@@ -120,20 +142,48 @@ export async function POST(request: Request) {
     // --- OFFLINE FALLBACK ---
     // If the HF space is offline, we parse the user's message locally
     const chatText = chat.toLowerCase();
-    const isBuyRequest = chatText.includes('buy') || chatText.includes('order') || chatText.includes('purchase') || chatText.includes('checkout');
+    const wantsRecommendation = /recommend|suggest|show|find|best|good|top|options|which|should/i.test(chatText);
+    const wantsBuyOrder = /buy|order|purchase|checkout|place.*order|add.*cart/i.test(chatText);
+    const isRecommendationOnly = wantsRecommendation && !/(place.*order|buy.*now|order.*now|checkout|purchase.*now|add.*cart)/i.test(chatText);
 
-    if (isBuyRequest) {
+    if (wantsRecommendation) {
+      const matches = findMatchingProducts(chatText);
+      if (matches.length > 0) {
+        const topMatches = matches.slice(0, 2);
+        const categoryName = topMatches[0].category || 'product';
+        let reply = `Here are two good ${categoryName} options for you:\n\n`;
+
+        topMatches.forEach((p, idx) => {
+          reply += `${idx + 1}. **${p.name}**\n`;
+          reply += `   - Price: ₹${Number(p.price).toLocaleString('en-IN')}\n`;
+          if (p.specs && typeof p.specs === 'object') {
+            Object.entries(p.specs).slice(0, 3).forEach(([key, val]) => {
+              reply += `   - ${key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ')}: ${val}\n`;
+            });
+          }
+          reply += `\n`;
+        });
+
+        reply += "Would you like to buy one of these?";
+        if (!isRecommendationOnly && wantsBuyOrder) {
+          reply += " If you want, I can also place an order for the best match.";
+        }
+        return NextResponse.json({ res: reply });
+      }
+    }
+
+    if (wantsBuyOrder) {
       const matches = findMatchingProducts(chatText);
       let targetProduct = matches[0];
 
       // Fallback searches if matching list is empty
       if (!targetProduct) {
-        if (chatText.includes('tv') || chatText.includes('television') || chatText.includes('vu') || chatText.includes('samsung')) {
-          targetProduct = (productsData as any[]).find(p => p.category === 'Electronics' || p.category === 'Monitors');
+        if (chatText.includes('tv') || chatText.includes('television') || chatText.includes('vu') || chatText.includes('samsung') || chatText.includes('lg') || chatText.includes('sony')) {
+          targetProduct = (productsData as any[]).find(p => p.category.toLowerCase().includes('television') || p.category.toLowerCase().includes('tv') || p.category.toLowerCase().includes('electronics'));
         } else if (chatText.includes('laptop') || chatText.includes('dell') || chatText.includes('lenovo') || chatText.includes('macbook')) {
-          targetProduct = (productsData as any[]).find(p => p.category === 'Laptops');
+          targetProduct = (productsData as any[]).find(p => p.category.toLowerCase().includes('laptop'));
         } else if (chatText.includes('keyboard') || chatText.includes('mouse') || chatText.includes('mice')) {
-          targetProduct = (productsData as any[]).find(p => p.category === 'Keyboards & Mice');
+          targetProduct = (productsData as any[]).find(p => p.category.toLowerCase().includes('keyboard') || p.category.toLowerCase().includes('mouse') || p.category.toLowerCase().includes('keyboards'));
         }
       }
 
@@ -155,7 +205,7 @@ export async function POST(request: Request) {
         const mockOrderId = `ORD-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
         const orderData = {
           order_id: mockOrderId,
-          user_id: thread_id, // Map thread_id as user_id in MongoDB
+          user_id: thread_id,
           product_name: targetProduct.name,
           price: Number(targetProduct.price),
           status: 'Placed',
@@ -189,30 +239,6 @@ export async function POST(request: Request) {
         return NextResponse.json({
           res: `Your order for the **${targetProduct.name}** has been successfully placed at a price of ₹${Number(targetProduct.price).toLocaleString('en-IN')}. \n\nOrder ID: ${orderDoc.order_id}. \n\n📦 **Delivery Timeline**: Your order will be automatically delivered within 7 days. \n\nIf you have any further questions or need assistance, feel free to ask!`
         });
-      }
-    }
-
-    // Recommendation fallback query check
-    const isRecommendationQuery = chatText.includes('recommend') || chatText.includes('suggest') || chatText.includes('show') || chatText.includes('find') || chatText.includes('good') || chatText.includes('best') || chatText.includes('list');
-
-    if (isRecommendationQuery) {
-      const matches = findMatchingProducts(chatText);
-      if (matches.length > 0) {
-        const topMatches = matches.slice(0, 2);
-        let categoryName = topMatches[0].category;
-        let reply = `Here are two good ${categoryName} options for you:\n\n`;
-        topMatches.forEach((p, idx) => {
-          reply += `${idx + 1}. **${p.name}**\n`;
-          reply += `   - Price: ₹${p.price.toLocaleString('en-IN')}\n`;
-          if (p.specs) {
-            Object.entries(p.specs).slice(0, 3).forEach(([key, val]) => {
-              reply += `   - ${key.charAt(0).toUpperCase() + key.slice(1).replace('_', ' ')}: ${val}\n`;
-            });
-          }
-          reply += `\n`;
-        });
-        reply += "Would you like to buy one of these?";
-        return NextResponse.json({ res: reply });
       }
     }
 

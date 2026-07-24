@@ -36,9 +36,17 @@ ShopEase Support is a modern, high-fidelity customer support interface built wit
 ## Getting Started
 
 ### 1. Environment Configuration
-Create a `.env.local` file in the root directory and configure the Hugging Face RAG API endpoint:
+Create a `.env.local` file in the root directory and configure your Hugging Face AI agent endpoints:
 ```env
+HF_API_CHAT_URL=https://your-hf-space.hf.space/chat
+HF_API_ORDER_URL=https://your-hf-space.hf.space/order
+```
+If your Hugging Face API only exposes a single `/chat` endpoint, you may set just `HF_API_CHAT_URL` and the order route will derive `/order` automatically.
 
+If your Hugging Face endpoint is protected, also add:
+```env
+HF_TOKEN=your-hf-token-here
+```
 
 ### 2. Install Dependencies
 ```bash
