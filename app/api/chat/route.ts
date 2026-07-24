@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { MongoClient } from 'mongodb';
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://omthakur:sxB1fxPqt50ddAT5@cluster0.lv5os6g.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+const DEFAULT_HF_CHAT_URL = 'https://omthakur1394-shopease-self-rag.hf.space/chat';
+const HF_CHAT_URL = process.env.HF_API_CHAT_URL || process.env.HF_API_URL || DEFAULT_HF_CHAT_URL;
+const HF_TOKEN = process.env.HF_TOKEN || process.env.HF_HUB_TOKEN || '';
 
 export async function POST(request: Request) {
   try {
@@ -18,18 +21,26 @@ export async function POST(request: Request) {
       );
     }
 
-    const hfApiUrl = process.env.HF_API_URL || 'https://omthakur1394-shopease-self-rag.hf.space/chat';
+    const hfApiUrl = HF_CHAT_URL;
 
     let hfSuccess = false;
     let hfData: any = null;
 
     try {
+      const userAuthHeader = request.headers.get('authorization');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (userAuthHeader) {
+        headers.Authorization = userAuthHeader;
+      } else if (HF_TOKEN) {
+        headers.Authorization = `Bearer ${HF_TOKEN}`;
+      }
+
       // Forward the new schema to FastAPI
       const response = await fetch(hfApiUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           chat: finalQuestion,
           order_id: finalOrderId,
@@ -40,6 +51,8 @@ export async function POST(request: Request) {
       if (response.ok) {
         hfData = await response.json();
         hfSuccess = true;
+      } else {
+        console.warn('HF Chat API returned status', response.status);
       }
     } catch (fetchErr) {
       console.error('HF Chat API fetch failed:', fetchErr);
