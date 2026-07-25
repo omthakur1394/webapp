@@ -1,15 +1,9 @@
 import { NextResponse } from 'next/server';
 import { MongoClient } from 'mongodb';
 import productsData from '../../data/products.json';
+import { getHfOrderUrl, hfPost } from '../../lib/hf-api';
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://omthakur:sxB1fxPqt50ddAT5@cluster0.lv5os6g.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
-const DEFAULT_HF_CHAT_URL = 'https://omthakur1394-shopease-self-rag.hf.space/chat';
-const HF_CHAT_URL = process.env.HF_API_CHAT_URL || process.env.HF_API_URL || DEFAULT_HF_CHAT_URL;
-const DEFAULT_HF_ORDER_URL = HF_CHAT_URL.match(/\/chat\/?$/i)
-  ? HF_CHAT_URL.replace(/\/chat\/?$/i, '/order')
-  : `${HF_CHAT_URL.replace(/\/+$/, '')}/order`;
-const HF_ORDER_URL = process.env.HF_API_ORDER_URL || process.env.HF_ORDER_URL || DEFAULT_HF_ORDER_URL;
-const HF_TOKEN = process.env.HF_TOKEN || process.env.HF_HUB_TOKEN || '';
 
 // Helper to search and match products by query keywords
 function findMatchingProducts(query: string): any[] {
@@ -104,33 +98,22 @@ export async function POST(request: Request) {
       );
     }
 
-    const hfApiUrl = HF_CHAT_URL;
-    const orderUrl = HF_ORDER_URL;
+    const orderUrl = getHfOrderUrl();
 
     let hfSuccess = false;
     let hfData: any = null;
 
     // Try forwarding to the Hugging Face FastAPI /order endpoint
     try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (HF_TOKEN) {
-        headers.Authorization = `Bearer ${HF_TOKEN}`;
-      }
-
-      const response = await fetch(orderUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ chat, thread_id }),
-      });
+      const response = await hfPost(orderUrl, { chat, thread_id });
 
       if (response.ok) {
         hfData = await response.json();
         hfSuccess = true;
-        console.log("Placed order directly via FastAPI endpoint /order");
+        console.log('Placed order directly via FastAPI endpoint /order');
       } else {
-        console.warn('HF Order API returned status', response.status);
+        const errorBody = await response.text().catch(() => '');
+        console.warn('HF Order API returned status', response.status, errorBody.slice(0, 200));
       }
     } catch (fetchErr) {
       console.error('HF Order API fetch failed:', fetchErr);
