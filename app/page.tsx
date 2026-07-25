@@ -747,10 +747,14 @@ export default function Home() {
         }
 
         const data = await res.json();
+        const botMessageContent = data.res
+          || (data.order_id ? `Your order has been placed successfully. Order ID: ${data.order_id}.` : null)
+          || data.error
+          || "I'm sorry, I couldn't process your request. Please try again.";
         const botMessage: Message = {
           id: crypto.randomUUID(),
           role: 'assistant',
-          content: data.res || '',
+          content: botMessageContent,
           timestamp: new Date()
         };
 

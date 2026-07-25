@@ -79,7 +79,8 @@ export async function POST(request: Request) {
           product_name: product_name,
           price: Number(price),
           status: 'Placed',
-          created_at: orderData.created_at.toISOString()
+          created_at: orderData.created_at.toISOString(),
+          res: `Your order for the **${product_name}** has been successfully placed at a price of ₹${Number(price).toLocaleString('en-IN')}. \n\nOrder ID: ${mockOrderId}. \n\n📦 **Delivery Timeline**: Your order will be automatically delivered within 7 days. \n\nIf you have any further questions or need assistance, feel free to ask!`
         });
       } catch (dbErr: any) {
         console.error('Direct checkout insert failed:', dbErr);
