@@ -109,7 +109,12 @@ export async function POST(request: Request) {
       const response = await hfPost(orderUrl, { chat, thread_id });
 
       if (response.ok) {
-        hfData = await response.json();
+        try {
+          hfData = await response.json();
+        } catch (parseErr) {
+          const textBody = await response.text().catch(() => '');
+          hfData = { res: textBody || 'Order endpoint returned an unexpected response format.' };
+        }
         hfSuccess = true;
         console.log('Placed order directly via FastAPI endpoint /order');
       } else {
@@ -121,7 +126,19 @@ export async function POST(request: Request) {
     }
 
     if (hfSuccess && hfData) {
-      return NextResponse.json(hfData);
+      const enrichedResponse = { ...hfData };
+      if (!enrichedResponse.res) {
+        if (typeof enrichedResponse.order_id === 'string') {
+          enrichedResponse.res = `Your order has been placed successfully. Order ID: ${enrichedResponse.order_id}.`;
+        } else if (typeof enrichedResponse.message === 'string') {
+          enrichedResponse.res = enrichedResponse.message;
+        } else if (typeof enrichedResponse.detail === 'string') {
+          enrichedResponse.res = enrichedResponse.detail;
+        } else {
+          enrichedResponse.res = JSON.stringify(enrichedResponse);
+        }
+      }
+      return NextResponse.json(enrichedResponse);
     }
 
     // --- OFFLINE FALLBACK ---

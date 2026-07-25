@@ -746,10 +746,20 @@ export default function Home() {
           throw new Error(`Order API returned status ${res.status}`);
         }
 
-        const data = await res.json();
-        const botMessageContent = data.res
-          || (data.order_id ? `Your order has been placed successfully. Order ID: ${data.order_id}.` : null)
-          || data.error
+        let data: any;
+        try {
+          data = await res.json();
+        } catch (parseErr) {
+          const textBody = await res.text().catch(() => '');
+          data = { res: textBody };
+        }
+
+        const botMessageContent =
+          (typeof data.res === 'string' && data.res.trim() !== '' ? data.res : null)
+          || (typeof data.order_id === 'string' ? `Your order has been placed successfully. Order ID: ${data.order_id}.` : null)
+          || (typeof data.message === 'string' ? data.message : null)
+          || (typeof data.detail === 'string' ? data.detail : null)
+          || (typeof data.error === 'string' ? data.error : null)
           || "I'm sorry, I couldn't process your request. Please try again.";
         const botMessage: Message = {
           id: crypto.randomUUID(),
