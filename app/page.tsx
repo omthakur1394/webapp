@@ -191,6 +191,8 @@ export default function Home() {
   
   // Storefront catalog states
   const [isChatOpen, setIsChatOpen] = useState(false); // Controls floating support chat drawer
+  const [drawerWidth, setDrawerWidth] = useState(520); // Resizable drawer width in pixels
+  const [isResizingDrawer, setIsResizingDrawer] = useState(false);
   const [productSearchQuery, setProductSearchQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null); // Ref to focus drawer chat input
 
@@ -610,6 +612,34 @@ export default function Home() {
       return () => clearTimeout(timer);
     }
   }, [isChatOpen]);
+
+  // Mouse Drag Resizer logic for Chat Drawer sidebar width
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizingDrawer) return;
+      const newWidth = window.innerWidth - e.clientX;
+      const clampedWidth = Math.max(340, Math.min(newWidth, window.innerWidth - 80));
+      setDrawerWidth(clampedWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingDrawer(false);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+
+    if (isResizingDrawer) {
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'ew-resize';
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingDrawer]);
 
   // Initialize browser Speech Recognition (Speech-to-Text API)
   useEffect(() => {
@@ -2392,10 +2422,25 @@ export default function Home() {
           <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-xs transition-opacity duration-300" onClick={() => setIsChatOpen(false)} />
           <div 
             id="support-chat-drawer"
-            className={`fixed top-0 right-0 h-full w-full sm:w-[500px] md:w-[540px] lg:w-[580px] border-l shadow-2xl flex flex-col z-50 overflow-hidden transition-all duration-300 ${
+            style={{ width: typeof window !== 'undefined' && window.innerWidth < 640 ? '100%' : `${drawerWidth}px` }}
+            className={`fixed top-0 right-0 h-full border-l shadow-2xl flex flex-col z-50 overflow-hidden max-w-full ${
+              isResizingDrawer ? 'transition-none select-none' : 'transition-all duration-150'
+            } ${
               theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'
             }`}
           >
+            {/* Draggable Resizer Boundary Handle on the left border */}
+            <div
+              onMouseDown={(e) => {
+                e.preventDefault();
+                setIsResizingDrawer(true);
+              }}
+              className="absolute top-0 left-0 bottom-0 w-2 hover:w-3 bg-transparent hover:bg-indigo-500/40 cursor-ew-resize z-50 flex items-center justify-center transition-all group"
+              title="Click and drag left/right to resize chat drawer width"
+            >
+              <div className="w-1 h-12 rounded-full bg-zinc-500/40 group-hover:bg-indigo-400 transition-colors shadow-sm" />
+            </div>
+
             {renderChatWindow(true)}
           </div>
         </>
