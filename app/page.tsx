@@ -915,13 +915,13 @@ export default function Home() {
         const ordMatch = cleanedResponse.match(/ORD-[A-Z0-9]{8}/i);
         const isOrderPlacedMsg = /successfully placed|order.*placed|has been.*placed/i.test(cleanedResponse);
 
-        if (ordMatch && isOrderPlacedMsg) {
-          const newOrderId = ordMatch[0].toUpperCase();
-          const titleMatch = cleanedResponse.match(/order for (?:the )?([^!\.,]+)/i);
+        if (isOrderPlacedMsg) {
+          const newOrderId = ordMatch ? ordMatch[0].toUpperCase() : `ORD-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+          const titleMatch = cleanedResponse.match(/order for (?:the )?([^!\.,\n]+)/i);
           const productName = titleMatch ? titleMatch[1].trim() : 'Purchased Item';
           
           const priceMatch = cleanedResponse.match(/₹\s*([\d,]+)/);
-          const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : 18999;
+          const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : 13490;
 
           setPlacedOrderId(newOrderId);
           setPlacedOrderDetailsId(Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join(''));
