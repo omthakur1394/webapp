@@ -926,6 +926,7 @@ export default function Home() {
           setPlacedOrderId(newOrderId);
           setPlacedOrderDetailsId(Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join(''));
           setIsOrderConfirmed(true);
+          setIsChatOpen(false); // Close chat drawer so confirmation modal is front & center
           setBuyProduct({
             id: 'chat-order-' + newOrderId,
             name: productName,
@@ -2882,7 +2883,7 @@ export default function Home() {
 
       {/* Buy Now Success Modal */}
       {buyProduct && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-fadeIn animate-duration-200">
+        <div className="fixed inset-0 bg-black/75 z-[60] flex items-center justify-center p-4 backdrop-blur-xs animate-fadeIn animate-duration-200">
           <div 
             id="buy-product-modal"
             className={`border rounded-2xl max-w-md w-full p-6 shadow-2xl relative ${
