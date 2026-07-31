@@ -812,6 +812,33 @@ export default function Home() {
         if (currentUser) {
           fetchUserOrders(currentUser.id.toString(), currentUser.username);
         }
+
+        // Auto-popup Order Confirmed Modal if Sales Assistant execution placed an order
+        const ordMatch = botMessageContent.match(/ORD-[A-Z0-9]{8}/i);
+        const isOrderPlacedMsg = /successfully placed|order.*placed|has been.*placed/i.test(botMessageContent);
+
+        if (isOrderPlacedMsg) {
+          const newOrderId = ordMatch ? ordMatch[0].toUpperCase() : `ORD-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+          const titleMatch = botMessageContent.match(/order for (?:the )?([^!\.,\n]+)/i);
+          const productName = titleMatch ? titleMatch[1].trim() : 'Purchased Item';
+          
+          const priceMatch = botMessageContent.match(/₹\s*([\d,]+)/);
+          const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : 18999;
+
+          setPlacedOrderId(newOrderId);
+          setPlacedOrderDetailsId(Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join(''));
+          setIsOrderConfirmed(true);
+          setIsChatOpen(false); // Close chat drawer so confirmation modal is front & center
+          setBuyProduct({
+            id: 'chat-order-' + newOrderId,
+            name: productName,
+            price: price,
+            category: 'Electronics',
+            image_url: 'https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?auto=format&fit=crop&w=600&q=80',
+            description: 'Order placed directly via ShopEase Sales Assistant',
+            specs: { Status: 'Order Confirmed', Source: 'Sales Assistant Chat' }
+          });
+        }
       } catch (err) {
         console.error('Sales Assistant failed:', err);
         const botMessage: Message = {
