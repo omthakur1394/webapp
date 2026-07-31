@@ -119,7 +119,9 @@ function ChatOrderTracker({ orderId, theme }: { orderId: string; theme: 'light' 
         <div className="w-5 h-5 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/25 flex-shrink-0">
           <Check className="w-3 h-3" />
         </div>
-        <span className="font-bold text-emerald-500">Order Confirmed!</span>
+        <span className="font-bold text-emerald-500">
+          {displayOrder.status ? `Order ${displayOrder.status}` : 'Order Confirmed!'}
+        </span>
       </div>
 
       <div className="space-y-1.5 font-normal">
@@ -1384,19 +1386,13 @@ export default function Home() {
           {messages.map((message) => {
             const isBot = message.role === 'assistant';
             
-            // Extract order ID for all assistant messages
+            // Extract order ID only for sales assistant order placements in drawer mode
             let orderIdMatch: string | null = null;
-            if (isBot) {
+            if (isBot && isDrawerMode) {
               const regex = /\b(ORD-[A-Z0-9]+)\b/i;
               const match = message.content.match(regex);
-              if (match) {
+              if (match && /successfully placed|order.*placed|has been.*placed/i.test(message.content)) {
                 orderIdMatch = match[1];
-              } else {
-                const mongoRegex = /\b([a-f\d]{24})\b/i;
-                const mongoMatch = message.content.match(mongoRegex);
-                if (mongoMatch) {
-                  orderIdMatch = mongoMatch[1];
-                }
               }
             }
 
