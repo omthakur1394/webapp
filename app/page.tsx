@@ -1315,7 +1315,9 @@ export default function Home() {
             return (
               <div
                 key={message.id}
-                className={`flex gap-3 max-w-[85%] sm:max-w-[75%] transition-all duration-300 animate-fadeIn ${
+                className={`flex gap-3 transition-all duration-300 animate-fadeIn ${
+                  isDrawerMode ? 'max-w-[95%]' : 'max-w-[85%] sm:max-w-[75%]'
+                } ${
                   isBot ? 'mr-auto' : 'ml-auto flex-row-reverse'
                 }`}
               >
@@ -2390,7 +2392,7 @@ export default function Home() {
           <div className="fixed inset-0 bg-black/60 z-40 backdrop-blur-xs transition-opacity duration-300" onClick={() => setIsChatOpen(false)} />
           <div 
             id="support-chat-drawer"
-            className={`fixed top-0 right-0 h-full w-full sm:w-[450px] md:w-[480px] border-l shadow-2xl flex flex-col z-50 overflow-hidden transition-all duration-300 ${
+            className={`fixed top-0 right-0 h-full w-full sm:w-[500px] md:w-[540px] lg:w-[580px] border-l shadow-2xl flex flex-col z-50 overflow-hidden transition-all duration-300 ${
               theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'
             }`}
           >
