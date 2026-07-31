@@ -910,6 +910,32 @@ export default function Home() {
           fetchWalletBalance(currentUser.username);
           fetchUserOrders(currentUser.id.toString(), currentUser.username);
         }
+
+        // Auto-popup Order Confirmed Modal if AI execution placed a new order
+        const ordMatch = cleanedResponse.match(/ORD-[A-Z0-9]{8}/i);
+        const isOrderPlacedMsg = /successfully placed|order.*placed|has been.*placed/i.test(cleanedResponse);
+
+        if (ordMatch && isOrderPlacedMsg) {
+          const newOrderId = ordMatch[0].toUpperCase();
+          const titleMatch = cleanedResponse.match(/order for (?:the )?([^!\.,]+)/i);
+          const productName = titleMatch ? titleMatch[1].trim() : 'Purchased Item';
+          
+          const priceMatch = cleanedResponse.match(/₹\s*([\d,]+)/);
+          const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : 18999;
+
+          setPlacedOrderId(newOrderId);
+          setPlacedOrderDetailsId(Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join(''));
+          setIsOrderConfirmed(true);
+          setBuyProduct({
+            id: 'chat-order-' + newOrderId,
+            name: productName,
+            price: price,
+            category: 'Electronics',
+            image_url: 'https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?auto=format&fit=crop&w=600&q=80',
+            description: 'Order placed directly via ShopEase Sales Assistant',
+            specs: { Status: 'Order Confirmed', Source: 'Sales Assistant Chat' }
+          });
+        }
       } catch (err: any) {
         console.error('Support Chat API request failed:', err);
         const mockReplies = [
