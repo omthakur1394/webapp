@@ -56,6 +56,26 @@ interface Product {
   specs: Record<string, string>;
 }
 
+// Feature Toggle: Set to false anytime to disable chat product images
+const SHOW_CHAT_IMAGES = true;
+
+function getMatchedProductsFromText(text: string): Product[] {
+  if (!text || !SHOW_CHAT_IMAGES) return [];
+  const matches: Product[] = [];
+  const lowerText = text.toLowerCase();
+  
+  for (const product of productsData as Product[]) {
+    const productNameLower = product.name.toLowerCase();
+    const coreName = productNameLower.split('(')[0].trim();
+    if (lowerText.includes(productNameLower) || (coreName.length > 5 && lowerText.includes(coreName))) {
+      if (!matches.some(m => m.id === product.id)) {
+        matches.push(product);
+      }
+    }
+  }
+  return matches.slice(0, 3);
+}
+
 // Client-side helper to track orders from MongoDB
 function ChatOrderTracker({ orderId, theme }: { orderId: string; theme: 'light' | 'dark' }) {
   const [order, setOrder] = useState<any>(null);
@@ -1449,6 +1469,34 @@ export default function Home() {
                         >
                           {message.content}
                         </ReactMarkdown>
+
+                        {/* Product Image Cards Gallery (Toggled by SHOW_CHAT_IMAGES) */}
+                        {isDrawerMode && SHOW_CHAT_IMAGES && getMatchedProductsFromText(message.content).length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-3 pt-2.5 border-t border-zinc-200 dark:border-zinc-800">
+                            {getMatchedProductsFromText(message.content).map((prod) => (
+                              <div 
+                                key={prod.id} 
+                                className={`flex items-center gap-2.5 p-2 rounded-xl border text-left max-w-[230px] shadow-xs transition-all hover:scale-[1.02] ${
+                                  theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-zinc-50 border-zinc-200'
+                                }`}
+                              >
+                                <img 
+                                  src={prod.image_url} 
+                                  alt={prod.name} 
+                                  className="w-11 h-11 rounded-lg object-cover flex-shrink-0 border border-zinc-200 dark:border-zinc-800"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1531403009284-440f080d1e12?auto=format&fit=crop&w=600&q=80';
+                                  }}
+                                />
+                                <div className="overflow-hidden min-w-0">
+                                  <h4 className={`text-[11px] font-bold truncate leading-tight ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>{prod.name}</h4>
+                                  <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 block mt-0.5">₹{prod.price.toLocaleString('en-IN')}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
                         {orderIdMatch && (
                           <ChatOrderTracker orderId={orderIdMatch} theme={theme} />
                         )}
