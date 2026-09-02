@@ -1,7 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Lock, RefreshCw, AlertTriangle, CheckCircle, LogOut, MapPin, Clock, Plus, AlertOctagon, ArrowLeft } from 'lucide-react';
+import { 
+  Lock, RefreshCw, AlertTriangle, CheckCircle, LogOut, MapPin, Clock, Plus, 
+  AlertOctagon, ArrowLeft, Pause, Play, Edit3, Trash2, Check, X, MessageSquare, Send
+} from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminPage() {
@@ -17,6 +20,11 @@ export default function AdminPage() {
   const [submittingNote, setSubmittingNote] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  // Edit / Order Note States
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editingNoteText, setEditingNoteText] = useState('');
+  const [orderNoteInputs, setOrderNoteInputs] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setMounted(true);
@@ -99,7 +107,7 @@ export default function AdminPage() {
     showToastMessage('Logged out successfully.');
   };
 
-  const handleHoldOrder = async (orderId: string) => {
+  const handleOrderAction = async (orderId: string, action: 'pause' | 'resume' | 'hold', adminNote?: string) => {
     if (!admin) return;
     try {
       const res = await fetch('/api/admin/orders', {
@@ -107,14 +115,23 @@ export default function AdminPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           order_id: orderId,
-          region: admin.region
+          region: admin.region,
+          action,
+          admin_note: adminNote
         })
       });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || 'Failed to update order status');
       }
-      showToastMessage(`Order put on hold.`);
+
+      const actionText = action === 'pause' ? 'paused' : action === 'resume' ? 'resumed' : 'put on hold';
+      showToastMessage(`Order ${orderId} has been ${actionText} in MongoDB.`);
+      
+      if (adminNote) {
+        setOrderNoteInputs(prev => ({ ...prev, [orderId]: '' }));
+      }
+      
       fetchDashboardData(admin.region);
     } catch (err: any) {
       alert(err.message);
@@ -136,7 +153,7 @@ export default function AdminPage() {
       });
       if (res.ok) {
         setNewNote('');
-        showToastMessage('Hub difficulty report logged.');
+        showToastMessage('Hub note saved to MongoDB.');
         fetchDashboardData(admin.region);
       }
     } catch (err) {
@@ -146,15 +163,56 @@ export default function AdminPage() {
     }
   };
 
+  const handleSaveEditNote = async (noteId: string) => {
+    if (!editingNoteText.trim()) return;
+    try {
+      const res = await fetch('/api/admin/messages', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: noteId,
+          note: editingNoteText
+        })
+      });
+      if (res.ok) {
+        showToastMessage('Message updated in MongoDB.');
+        setEditingNoteId(null);
+        setEditingNoteText('');
+        if (admin) fetchDashboardData(admin.region);
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to update message');
+      }
+    } catch (err: any) {
+      alert('Error updating note: ' + err.message);
+    }
+  };
+
+  const handleDeleteNote = async (noteId: string) => {
+    if (!confirm('Are you sure you want to delete this message from MongoDB?')) return;
+    try {
+      const res = await fetch(`/api/admin/messages?id=${encodeURIComponent(noteId)}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        showToastMessage('Message deleted from MongoDB.');
+        if (admin) fetchDashboardData(admin.region);
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to delete message');
+      }
+    } catch (err: any) {
+      alert('Error deleting note: ' + err.message);
+    }
+  };
+
   if (!mounted) return null;
 
   const getOrderRegion = (order: any) => {
-    // 1. Prefer the explicit hub_region field saved at order time
     if (order.hub_region && order.hub_region !== 'General Hub') {
       if (order.hub_region.toLowerCase().includes('mumbai')) return 'Mumbai';
       if (order.hub_region.toLowerCase().includes('nagpur')) return 'Nagpur';
     }
-    // 2. Fall back to keyword-matching the shipping address
     const addr = (order.shipping_address || '').toLowerCase();
     if (addr.includes('mumbai')) return 'Mumbai';
     if (addr.includes('nagpur')) return 'Nagpur';
@@ -162,14 +220,15 @@ export default function AdminPage() {
   };
 
   const totalOrders = orders.length;
-  const regionalOrders = orders.filter(o => getOrderRegion(o) === admin?.region);
-  const heldOrders = regionalOrders.filter(o => o.status === 'On Hold').length;
+  const regionalOrders = orders.filter(o => getOrderRegion(o) === admin?.region || admin?.region === 'Super');
+  const pausedOrders = regionalOrders.filter(o => o.status === 'Paused' || o.status === 'On Hold').length;
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
       {toast && (
-        <div className="fixed bottom-5 right-5 bg-zinc-900 border border-zinc-800 text-white px-4 py-2.5 rounded-xl shadow-2xl z-50 text-xs font-bold animate-fadeIn">
-          \ud83d\udd14 {toast}
+        <div className="fixed bottom-5 right-5 bg-zinc-900 border border-zinc-800 text-white px-4 py-2.5 rounded-xl shadow-2xl z-50 text-xs font-bold animate-fadeIn flex items-center gap-2">
+          <CheckCircle className="w-4 h-4 text-emerald-400" />
+          <span>{toast}</span>
         </div>
       )}
 
@@ -180,9 +239,9 @@ export default function AdminPage() {
           </Link>
           <div>
             <h1 className="text-sm font-extrabold text-white flex items-center gap-1.5">
-              📦 ShopEase Hub Portal
+              📦 ShopEase Admin Control Portal
             </h1>
-            <p className="text-[10px] text-zinc-500">Regional Fulfillment Administrations</p>
+            <p className="text-[10px] text-zinc-500">Order Pause/Resume & MongoDB System Note Administration</p>
           </div>
         </div>
         {admin && (
@@ -211,7 +270,7 @@ export default function AdminPage() {
                   <Lock className="w-5 h-5 text-indigo-400" />
                 </div>
                 <h2 className="text-base font-bold text-white">Hub Administrator Login</h2>
-                <p className="text-[10px] text-zinc-500 mt-1">Please enter your assigned security password credential</p>
+                <p className="text-[10px] text-zinc-500 mt-1">Enter password credential (e.g. nagpur123, mumbai123, admin123)</p>
               </div>
 
               <form onSubmit={handleLogin} className="space-y-4">
@@ -259,7 +318,7 @@ export default function AdminPage() {
 
               <div className="bg-zinc-900/60 border border-zinc-850 p-4.5 rounded-2xl flex items-center justify-between shadow-xs">
                 <div>
-                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Hub Pending ({admin.region})</span>
+                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Hub Regional ({admin.region})</span>
                   <div className="text-xl font-black mt-1 text-white">{regionalOrders.length}</div>
                 </div>
                 <div className="w-10 h-10 bg-indigo-500/10 rounded-xl flex items-center justify-center border border-indigo-500/15">
@@ -269,8 +328,8 @@ export default function AdminPage() {
 
               <div className="bg-zinc-900/60 border border-zinc-850 p-4.5 rounded-2xl flex items-center justify-between shadow-xs">
                 <div>
-                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Held Orders ({admin.region})</span>
-                  <div className="text-xl font-black mt-1 text-amber-500">{heldOrders}</div>
+                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Paused / Held Orders ({admin.region})</span>
+                  <div className="text-xl font-black mt-1 text-amber-500">{pausedOrders}</div>
                 </div>
                 <div className="w-10 h-10 bg-amber-500/10 rounded-xl flex items-center justify-center border border-amber-500/15">
                   <AlertOctagon className="w-4 h-4 text-amber-400" />
@@ -279,20 +338,22 @@ export default function AdminPage() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Order Controls Table (Pause / Resume / Admin Notes) */}
               <div className="lg:col-span-2 bg-zinc-900/60 border border-zinc-850 p-6 rounded-2xl shadow-lg flex flex-col space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                      📋 Regional Fulfillment List
+                      📋 Order Fulfillment & Pause/Resume Control
                     </h2>
-                    <p className="text-[10px] text-zinc-500">Orders restricted by regional address configurations</p>
+                    <p className="text-[10px] text-zinc-500">Pause orders, resume operations, and record system notes in MongoDB</p>
                   </div>
                   <button
                     onClick={() => fetchDashboardData(admin.region)}
-                    className="p-1.5 rounded-lg border border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                    className="p-1.5 rounded-lg border border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1 text-xs"
                     title="Refresh List"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+                    <span>Refresh</span>
                   </button>
                 </div>
 
@@ -302,74 +363,111 @@ export default function AdminPage() {
                       <tr className="border-b border-zinc-850 text-zinc-500">
                         <th className="pb-3 font-bold uppercase tracking-wider">Order ID</th>
                         <th className="pb-3 font-bold uppercase tracking-wider">Item Details</th>
-                        <th className="pb-3 font-bold uppercase tracking-wider">Region</th>
                         <th className="pb-3 font-bold uppercase tracking-wider">Status</th>
-                        <th className="pb-3 font-bold uppercase tracking-wider text-right">Actions</th>
+                        <th className="pb-3 font-bold uppercase tracking-wider text-right">Pause / Resume / Note</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-850">
                       {orders.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="py-6 text-center text-zinc-500">No orders found in the system.</td>
+                          <td colSpan={4} className="py-6 text-center text-zinc-500">No orders found in MongoDB database.</td>
                         </tr>
                       ) : (
                         orders.map((order) => {
                           const orderRegion = getOrderRegion(order);
-                          const isRegional = orderRegion === admin.region;
+                          const isRegional = orderRegion === admin.region || admin.region === 'Super';
+                          const isPaused = order.status === 'Paused' || order.status === 'On Hold';
 
                           return (
                             <tr key={order._id} className="hover:bg-zinc-850/[0.15] transition-all">
-                              <td className="py-4.5 font-bold text-white">
-                                <div>{order.order_id}</div>
+                              <td className="py-4 font-bold text-white align-top">
+                                <div className="font-mono text-indigo-400">{order.order_id}</div>
                                 <div className="text-[9px] text-zinc-500 font-normal mt-0.5">
                                   {new Date(order.created_at).toLocaleDateString()}
                                 </div>
+                                {order.admin_note && (
+                                  <div className="mt-1 text-[9.5px] p-1.5 bg-indigo-950/40 border border-indigo-800/40 text-indigo-300 rounded-md max-w-[160px]">
+                                    📌 <strong>Note:</strong> {order.admin_note}
+                                  </div>
+                                )}
                               </td>
-                              <td className="py-4.5">
+
+                              <td className="py-4 align-top">
                                 <div className="font-semibold line-clamp-1 max-w-[180px]">{order.product_name}</div>
                                 <div className="text-[10px] text-zinc-400 mt-0.5">₹{Number(order.price).toLocaleString('en-IN')}</div>
-                              </td>
-                              <td className="py-4.5">
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                                <span className={`inline-block mt-1 text-[9px] font-bold px-1.5 py-0.5 rounded ${
                                   isRegional
                                     ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
                                     : 'bg-zinc-800 text-zinc-500'
                                 }`}>
-                                  {orderRegion}
+                                  {orderRegion} Region
                                 </span>
                               </td>
-                              <td className="py-4.5">
-                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
+
+                              <td className="py-4 align-top">
+                                <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full border ${
                                   order.status === 'Delivered'
                                     ? 'bg-blue-500/10 text-blue-500 border-blue-500/20'
                                     : order.status === 'Placed'
                                     ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                                    : order.status === 'On Hold'
-                                    ? 'bg-amber-500/10 text-amber-500 border-amber-500/20'
-                                    : order.status === 'Refunded'
-                                    ? 'bg-rose-500/10 text-rose-500 border-rose-500/20'
+                                    : isPaused
+                                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                                     : 'bg-zinc-800 text-zinc-400 border-zinc-700'
                                 }`}>
+                                  {isPaused ? <Pause className="w-2.5 h-2.5" /> : <Check className="w-2.5 h-2.5" />}
                                   {order.status}
                                 </span>
                               </td>
-                              <td className="py-4.5 text-right">
+
+                              <td className="py-4 text-right align-top space-y-2">
                                 {isRegional ? (
-                                  order.status === 'On Hold' ? (
-                                    <span className="text-[10px] text-zinc-500 flex items-center gap-1 justify-end font-semibold">
-                                      <CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> Held
-                                    </span>
-                                  ) : (
-                                    <button
-                                      onClick={() => handleHoldOrder(order.order_id)}
-                                      className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white font-extrabold rounded-lg text-[10px] transition-all cursor-pointer shadow-md shadow-amber-700/15"
-                                    >
-                                      Hold Order
-                                    </button>
-                                  )
+                                  <div className="flex flex-col items-end gap-1.5">
+                                    <div className="flex items-center gap-1.5">
+                                      {isPaused ? (
+                                        <button
+                                          onClick={() => handleOrderAction(order.order_id, 'resume')}
+                                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-lg text-[10px] transition-all cursor-pointer flex items-center gap-1 shadow-md shadow-emerald-700/15"
+                                          title="Resume order fulfillment"
+                                        >
+                                          <Play className="w-3 h-3 fill-current" /> Resume Order
+                                        </button>
+                                      ) : (
+                                        <button
+                                          onClick={() => handleOrderAction(order.order_id, 'pause')}
+                                          className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white font-extrabold rounded-lg text-[10px] transition-all cursor-pointer flex items-center gap-1 shadow-md shadow-amber-700/15"
+                                          title="Pause order fulfillment"
+                                        >
+                                          <Pause className="w-3 h-3" /> Pause Order
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {/* Inline Admin Note input for Order */}
+                                    <div className="flex items-center gap-1 mt-1">
+                                      <input
+                                        type="text"
+                                        placeholder="Add system note..."
+                                        value={orderNoteInputs[order.order_id] || ''}
+                                        onChange={(e) => setOrderNoteInputs({ ...orderNoteInputs, [order.order_id]: e.target.value })}
+                                        className="bg-zinc-950 border border-zinc-800 text-white text-[10px] rounded-md px-2 py-1 outline-none focus:border-indigo-500 w-[120px]"
+                                      />
+                                      <button
+                                        onClick={() => {
+                                          const note = orderNoteInputs[order.order_id];
+                                          if (note?.trim()) {
+                                            handleOrderAction(order.order_id, isPaused ? 'pause' : 'resume', note);
+                                          }
+                                        }}
+                                        className="p-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-[10px] cursor-pointer"
+                                        title="Save Note to MongoDB"
+                                      >
+                                        <Send className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </div>
                                 ) : (
-                                  <span className="text-[9px] text-zinc-650 italic font-semibold">
-                                    Access Restricted
+                                  <span className="text-[9px] text-zinc-600 italic font-semibold">
+                                    Restricted to {orderRegion}
                                   </span>
                                 )}
                               </td>
@@ -382,12 +480,13 @@ export default function AdminPage() {
                 </div>
               </div>
 
+              {/* System Notes & Messages (Edit / Delete in MongoDB) */}
               <div className="bg-zinc-900/60 border border-zinc-850 p-6 rounded-2xl shadow-lg flex flex-col space-y-4">
                 <div>
                   <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                    ⚠️ Hub Difficulty Logs
+                    💬 System & Hub Messages
                   </h2>
-                  <p className="text-[10px] text-zinc-500">Record bottlenecks or operational delays in the regional hub</p>
+                  <p className="text-[10px] text-zinc-500">Log, edit, or delete operational system notes directly in MongoDB</p>
                 </div>
 
                 <form onSubmit={handleAddNote} className="space-y-3">
@@ -395,7 +494,7 @@ export default function AdminPage() {
                     required
                     value={newNote}
                     onChange={(e) => setNewNote(e.target.value)}
-                    placeholder="Enter difficulty notes here..."
+                    placeholder="Enter new system note message..."
                     rows={3}
                     className="w-full bg-zinc-950 border border-zinc-800 text-white text-xs rounded-xl p-3 outline-none focus:border-indigo-500 transition-all resize-none placeholder-zinc-600"
                   />
@@ -405,28 +504,80 @@ export default function AdminPage() {
                     className="w-full bg-indigo-650 hover:bg-indigo-600 disabled:opacity-50 text-white font-bold text-xs py-2 rounded-xl active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-1.5"
                   >
                     {submittingNote ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                    Log Difficulty Note
+                    Add System Note to MongoDB
                   </button>
                 </form>
 
-                <div className="flex-1 flex flex-col min-h-[180px] space-y-3">
-                  <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Note logs ({admin.region})</h3>
-                  <div className="overflow-y-auto max-h-[220px] space-y-3 pr-1">
+                <div className="flex-1 flex flex-col min-h-[220px] space-y-3">
+                  <h3 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Saved System Notes ({notes.length})</h3>
+                  <div className="overflow-y-auto max-h-[320px] space-y-3 pr-1">
                     {notes.length === 0 ? (
-                      <div className="text-center py-8 text-[11px] text-zinc-500">No hub logs recorded.</div>
+                      <div className="text-center py-8 text-[11px] text-zinc-500">No system messages logged.</div>
                     ) : (
-                      notes.map((log) => (
-                        <div
-                          key={log._id}
-                          className="p-3 border border-zinc-850 bg-zinc-950/40 rounded-xl space-y-1.5"
-                        >
-                          <p className="text-xs text-zinc-200 leading-relaxed font-medium">{log.note}</p>
-                          <div className="text-[9px] text-zinc-500 flex items-center gap-1 font-normal">
-                            <Clock className="w-2.5 h-2.5" />
-                            {new Date(log.created_at).toLocaleString()}
+                      notes.map((log) => {
+                        const isEditing = editingNoteId === log._id;
+
+                        return (
+                          <div
+                            key={log._id}
+                            className="p-3 border border-zinc-850 bg-zinc-950/50 rounded-xl space-y-2 transition-all hover:border-zinc-800"
+                          >
+                            {isEditing ? (
+                              <div className="space-y-2">
+                                <textarea
+                                  value={editingNoteText}
+                                  onChange={(e) => setEditingNoteText(e.target.value)}
+                                  className="w-full bg-zinc-900 border border-zinc-700 text-white text-xs rounded-lg p-2 outline-none focus:border-indigo-500 resize-none"
+                                  rows={2}
+                                />
+                                <div className="flex justify-end gap-2">
+                                  <button
+                                    onClick={() => setEditingNoteId(null)}
+                                    className="px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded text-[10px] font-bold flex items-center gap-1"
+                                  >
+                                    <X className="w-3 h-3" /> Cancel
+                                  </button>
+                                  <button
+                                    onClick={() => handleSaveEditNote(log._id)}
+                                    className="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-[10px] font-bold flex items-center gap-1"
+                                  >
+                                    <Check className="w-3 h-3" /> Save to MongoDB
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <p className="text-xs text-zinc-200 leading-relaxed font-medium">{log.note || log.content}</p>
+                                <div className="flex items-center justify-between text-[9px] text-zinc-500 pt-1 border-t border-zinc-900">
+                                  <div className="flex items-center gap-1">
+                                    <Clock className="w-2.5 h-2.5 text-zinc-500" />
+                                    <span>{new Date(log.created_at || Date.now()).toLocaleString()}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      onClick={() => {
+                                        setEditingNoteId(log._id);
+                                        setEditingNoteText(log.note || log.content || '');
+                                      }}
+                                      className="p-1 hover:bg-zinc-800 text-indigo-400 hover:text-indigo-300 rounded transition-colors"
+                                      title="Edit Message in MongoDB"
+                                    >
+                                      <Edit3 className="w-3 h-3" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteNote(log._id)}
+                                      className="p-1 hover:bg-zinc-800 text-red-400 hover:text-red-300 rounded transition-colors"
+                                      title="Delete Message from MongoDB"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </>
+                            )}
                           </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </div>
