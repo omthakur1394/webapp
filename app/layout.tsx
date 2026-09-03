@@ -1,5 +1,13 @@
 import type { Metadata } from "next";
+import { Roboto } from "next/font/google";
 import "./globals.css";
+
+const roboto = Roboto({
+  weight: ['100', '300', '400', '500', '700', '900'],
+  subsets: ["latin"],
+  variable: "--font-roboto",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "ShopEase Support - 24/7 E-commerce Customer Assistant",
@@ -14,15 +22,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className="h-full antialiased font-sans"
-      style={{
-        // Map local fallback font variables to match the Tailwind config
-        ['--font-geist-sans' as any]: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-        ['--font-geist-mono' as any]: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
-      }}
+      className={`h-full antialiased ${roboto.className}`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
 }
-

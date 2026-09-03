@@ -25,7 +25,10 @@ import {
   MicOff,
   ShoppingBag,
   Eye,
-  EyeOff
+  EyeOff,
+  Inbox,
+  Clock,
+  AlertTriangle
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import productsData from './data/products.json';
@@ -212,8 +215,8 @@ export default function Home() {
   const recognitionRef = useRef<any>(null);
   const initialInputRef = useRef<string>('');
 
-  // Storefront view state: 'shop' or 'chat' (full-screen chat)
-  const [activeView, setActiveView] = useState<'shop' | 'chat'>('shop');
+  // Storefront view state: 'shop', 'chat' (full-screen support chat), or 'grievance' (Grievance Redressal Portal)
+  const [activeView, setActiveView] = useState<'shop' | 'chat' | 'grievance'>('shop');
   
   // Storefront catalog states
   const [isChatOpen, setIsChatOpen] = useState(false); // Controls floating support chat drawer
@@ -258,6 +261,28 @@ export default function Home() {
   const [userOrders, setUserOrders] = useState<any[]>([]);
   const [isOrdersLoading, setIsOrdersLoading] = useState(false);
   const [isAddressesLoading, setIsAddressesLoading] = useState(false);
+
+  // User Grievance Inbox Modal States
+  const [isInboxModalOpen, setIsInboxModalOpen] = useState(false);
+  const [userTickets, setUserTickets] = useState<any[]>([]);
+  const [userGrievances, setUserGrievances] = useState<any[]>([]);
+  const [isInboxLoading, setIsInboxLoading] = useState(false);
+
+  const fetchUserInbox = async (email: string, username: string) => {
+    setIsInboxLoading(true);
+    try {
+      const res = await fetch(`/api/user/tickets?email=${encodeURIComponent(email)}&username=${encodeURIComponent(username)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setUserTickets(data.tickets || []);
+        setUserGrievances(data.grievances || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch user grievance inbox:', err);
+    } finally {
+      setIsInboxLoading(false);
+    }
+  };
 
   const [newAddressLine, setNewAddressLine] = useState('');
   const [newCity, setNewCity] = useState('');
@@ -1937,6 +1962,22 @@ export default function Home() {
                 My Account
               </button>
               <button
+                onClick={() => {
+                  if (currentUser) {
+                    fetchUserInbox(currentUser.email, currentUser.username);
+                  }
+                  setIsInboxModalOpen(true);
+                }}
+                className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+                  theme === 'dark'
+                    ? 'border-indigo-700/60 bg-indigo-950/40 text-indigo-300 hover:bg-indigo-900/60'
+                    : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                }`}
+              >
+                <Inbox className="w-3.5 h-3.5" />
+                <span>Grievance Inbox</span>
+              </button>
+              <button
                 id="auth-logout-btn"
                 onClick={handleLogout}
                 className="text-[11px] font-semibold text-red-500 hover:text-red-400 cursor-pointer transition-colors"
@@ -2270,7 +2311,7 @@ export default function Home() {
             {/* Main Chat Interface */}
             {renderChatWindow(false)}
           </div>
-        ) : (
+        ) : activeView === 'shop' ? (
           // Storefront Products Catalog Grid View
           <section className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 overflow-y-auto">
             {/* Featured Header */}
@@ -2497,7 +2538,7 @@ export default function Home() {
               </div>
             )}
           </section>
-        )}
+        ) : null}
       </div>
 
       {/* Floating Chat Bubble widget (Shop view only, drawer closed) */}
@@ -3224,6 +3265,138 @@ export default function Home() {
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition-all active:scale-[0.98] cursor-pointer shadow-md shadow-indigo-650/15"
               >
                 Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Grievance & Support Inbox Modal */}
+      {isInboxModalOpen && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-fadeIn">
+          <div className={`border rounded-2xl max-w-2xl w-full p-6 shadow-2xl relative max-h-[85vh] flex flex-col ${
+            theme === 'dark' ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-zinc-200 text-zinc-900'
+          }`}>
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-600/10 border border-indigo-500/20 rounded-xl flex items-center justify-center">
+                  <Inbox className="w-5 h-5 text-indigo-500" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white">📫 My Grievance & Support Inbox</h3>
+                  <p className="text-[11px] text-zinc-400">Track your complaint status and read official officer response notes</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsInboxModalOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto py-4 space-y-4 pr-1">
+              {!currentUser ? (
+                <div className="text-center py-10 space-y-3">
+                  <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
+                  <p className="text-xs text-zinc-400">Please sign in to your ShopEase account to view your grievance inbox.</p>
+                  <button
+                    onClick={() => {
+                      setIsInboxModalOpen(false);
+                      setIsAuthModalOpen(true);
+                    }}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl"
+                  >
+                    Sign In Now
+                  </button>
+                </div>
+              ) : isInboxLoading ? (
+                <div className="flex items-center justify-center py-12 text-zinc-400 gap-2 text-xs">
+                  <RefreshCw className="w-4 h-4 animate-spin text-indigo-400" />
+                  <span>Loading your grievance responses from MongoDB...</span>
+                </div>
+              ) : userTickets.length === 0 && userGrievances.length === 0 ? (
+                <div className="text-center py-12 border border-dashed border-zinc-800 rounded-2xl p-6">
+                  <Check className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
+                  <p className="text-xs font-bold text-white mb-1">No Active Grievances or Support Complaints</p>
+                  <p className="text-[11px] text-zinc-400 max-w-sm mx-auto">
+                    You have zero open support complaints. If you experience an order delivery or missing item issue, contact Support Chat!
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {[...userTickets, ...userGrievances.map(g => ({
+                    _id: g._id,
+                    order_id: g.order_id,
+                    message: g.admin_note ? `Order Grievance: ${g.admin_note}` : `Order status: ${g.status}`,
+                    status: g.status,
+                    escalation_level: g.status === 'Paused' ? 2 : 1,
+                    product_name: g.product_name,
+                    price: g.price,
+                    created_at: g.created_at,
+                    officer_response: g.admin_note || g.officer_response,
+                    last_handled_by: g.last_officer || g.last_handled_by
+                  }))].map((item, idx) => {
+                    const isResolved = item.status === 'Resolved' || item.status === 'Refunded';
+
+                    return (
+                      <div key={item._id || idx} className="p-4 rounded-xl border border-zinc-850 bg-zinc-950/40 space-y-2.5">
+                        <div className="flex items-start justify-between gap-2 border-b border-zinc-850 pb-2.5">
+                          <div>
+                            <span className="font-mono text-indigo-400 text-xs font-bold">
+                              Ticket / Order ID: #{item.order_id || item._id?.toString().slice(0, 10)}
+                            </span>
+                            {item.product_name && (
+                              <p className="text-xs font-medium text-white mt-0.5">{item.product_name} (₹{Number(item.price || 0).toLocaleString('en-IN')})</p>
+                            )}
+                            <p className="text-[10px] text-zinc-500">{new Date(item.created_at || Date.now()).toLocaleString()}</p>
+                          </div>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 ${
+                            isResolved
+                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                              : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                          }`}>
+                            {isResolved ? <Check className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                            {item.status || 'Under Investigation'}
+                          </span>
+                        </div>
+
+                        <p className="text-xs text-zinc-300 leading-relaxed font-medium">
+                          <strong>Issue Filed:</strong> {item.message || 'Order support ticket.'}
+                        </p>
+
+                        {/* Officer Response Note */}
+                        {item.officer_response ? (
+                          <div className="p-3 bg-indigo-950/40 border border-indigo-800/40 rounded-xl text-xs space-y-1">
+                            <div className="flex items-center justify-between text-[10px] font-bold text-indigo-400">
+                              <span>💬 Official Officer Response ({item.last_handled_by || 'Grievance Desk'}):</span>
+                            </div>
+                            <p className="text-indigo-200 text-xs leading-relaxed font-medium">
+                              {item.officer_response}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-[11px] text-zinc-400 flex items-center gap-2">
+                            <Clock className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 animate-spin" />
+                            <span>Assigned to Level {item.escalation_level || 1} Grievance Officer. Response pending within 24 hours.</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="pt-4 border-t border-zinc-800 flex justify-end">
+              <button
+                onClick={() => setIsInboxModalOpen(false)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-bold transition-all"
+              >
+                Close Inbox
               </button>
             </div>
           </div>
