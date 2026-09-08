@@ -1,0 +1,205 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="110"
+  height="110"
+  viewBox="0 0 110 110"
+  fill="none"
+>
+  <defs>
+    <linearGradient
+      id="brandIcon"
+      x1="5"
+      y1="5"
+      x2="90"
+      y2="100"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop offset="0" stop-color="#7C3AED"/>
+      <stop offset="0.42" stop-color="#4F46E5"/>
+      <stop offset="0.75" stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#06B6D4"/>
+    </linearGradient>
+
+    <linearGradient
+      id="secondaryIcon"
+      x1="30"
+      y1="20"
+      x2="85"
+      y2="90"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop offset="0" stop-color="#818CF8"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+
+    <linearGradient
+      id="foldIcon"
+      x1="55"
+      y1="45"
+      x2="88"
+      y2="95"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop offset="0" stop-color="#1D4ED8"/>
+      <stop offset="1" stop-color="#0891B2"/>
+    </linearGradient>
+
+    <filter
+      id="logoShadowIcon"
+      x="-30%"
+      y="-30%"
+      width="160%"
+      height="170%"
+    >
+      <feDropShadow
+        dx="0"
+        dy="5"
+        stdDeviation="5"
+        flood-opacity="0.15"
+      />
+    </filter>
+  </defs>
+
+  <g filter="url(#logoShadowIcon)">
+    <path
+      d="
+        M25 43
+        V29
+        C25 14 35 7 49 7
+        C63 7 73 14 73 29
+        V43
+      "
+      stroke="url(#brandIcon)"
+      stroke-width="10"
+      stroke-linecap="round"
+      fill="none"
+    />
+
+    <path
+      d="
+        M34 38
+        V29
+        C34 19 40 15 49 15
+        C58 15 64 19 64 29
+        V38
+      "
+      stroke="url(#secondaryIcon)"
+      stroke-width="3"
+      stroke-linecap="round"
+      fill="none"
+      opacity="0.8"
+    />
+
+    <path
+      d="
+        M10 38
+        H88
+        L81 96
+        H17
+        Z
+      "
+      fill="url(#brandIcon)"
+    />
+
+    <path
+      d="
+        M10 38
+        H88
+        L84 47
+        H14
+        Z
+      "
+      fill="#4338CA"
+      opacity="0.35"
+    />
+
+    <path
+      d="
+        M88 38
+        L81 96
+        L60 75
+        V38
+        Z
+      "
+      fill="url(#foldIcon)"
+    />
+
+    <path
+      d="
+        M60 38
+        H88
+        L60 64
+        Z
+      "
+      fill="#FFFFFF"
+      opacity="0.09"
+    />
+
+    <path
+      d="
+        M65 52
+        C61 46
+        55 43
+        48 43
+
+        C39 43
+        32 47
+        32 53
+
+        C32 60
+        38 63
+        48 66
+
+        C58 69
+        64 73
+        64 80
+
+        C64 88
+        57 92
+        48 92
+
+        C39 92
+        31 88
+        27 82
+      "
+      stroke="white"
+      stroke-width="6"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      fill="none"
+    />
+
+    <path
+      d="
+        M35 52
+        C39 48 43 47 48 47
+      "
+      stroke="white"
+      stroke-width="2"
+      stroke-linecap="round"
+      opacity="0.5"
+    />
+  </g>
+
+  <path
+    d="
+      M94 19
+      L98 27
+      L106 31
+      L98 35
+      L94 43
+      L90 35
+      L82 31
+      L90 27
+      Z
+    "
+    fill="url(#secondaryIcon)"
+  />
+
+  <circle
+    cx="103"
+    cy="17"
+    r="2.5"
+    fill="#22D3EE"
+  />
+</svg>

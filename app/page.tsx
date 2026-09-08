@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { BrandIconLogo, SupportChatLogo, SalesAgentLogo } from './components/Logos';
 import { 
   Send, 
   Bot, 
@@ -1367,15 +1368,17 @@ export default function Home() {
             )}
 
             <div className="relative">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center border text-indigo-650 ${theme === 'dark' ? 'bg-zinc-800 border-zinc-700' : 'bg-indigo-50 border-indigo-100'}`}>
-                <Bot className="w-5.5 h-5.5" />
-              </div>
+              {isDrawerMode ? (
+                <SalesAgentLogo className="w-10 h-10 drop-shadow-sm" />
+              ) : (
+                <SupportChatLogo className="w-10 h-10 drop-shadow-sm" />
+              )}
               <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white animate-pulse"></span>
             </div>
             <div>
               <div className="flex items-center gap-1.5">
                 <h2 className={`font-semibold text-sm md:text-base leading-none ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>
-                  {isDrawerMode ? 'Personal Sales Assistant' : 'ShopEase Support'}
+                  {isDrawerMode ? 'Personal Sales Agent' : 'ShopEase Support System'}
                 </h2>
                 <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border ${theme === 'dark' ? 'bg-emerald-950/20 text-emerald-400 border-emerald-900/40' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
                   Online
@@ -1680,9 +1683,7 @@ export default function Home() {
 
         {/* Logo and Branding */}
         <div className="flex flex-col items-center gap-3 mb-8 text-center animate-fadeIn">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-white shadow-xl shadow-indigo-500/20">
-            <Sparkles className="w-6 h-6 animate-pulse" />
-          </div>
+          <BrandIconLogo className="w-14 h-14 drop-shadow-xl hover:scale-105 transition-transform" />
           <div>
             <h1 className="font-extrabold text-2xl tracking-tight bg-gradient-to-r from-zinc-900 via-zinc-750 to-zinc-900 dark:from-white dark:via-zinc-200 dark:to-white bg-clip-text text-transparent">
               ShopEase
@@ -1852,8 +1853,8 @@ export default function Home() {
       {/* Premium E-Commerce Header */}
       <header className={`sticky top-0 z-30 border-b px-6 py-4 flex items-center justify-between transition-colors duration-300 ${theme === 'dark' ? 'bg-zinc-900/90 border-zinc-800 backdrop-blur-md' : 'bg-white/90 border-zinc-200 backdrop-blur-md'}`}>
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
-            <Sparkles className="w-5 h-5 animate-pulse" />
+          <div onClick={() => { setActiveView('shop'); setIsChatOpen(false); }} className="cursor-pointer">
+            <BrandIconLogo className="w-9 h-9 hover:scale-105 transition-transform" />
           </div>
           <div onClick={() => { setActiveView('shop'); setIsChatOpen(false); }} className="cursor-pointer">
             <h1 className={`font-bold text-sm sm:text-base leading-none tracking-tight ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>
@@ -2117,16 +2118,14 @@ export default function Home() {
                 <div className={`flex items-center justify-between px-4 py-4 border-b w-full ${theme === 'dark' ? 'border-zinc-900' : 'border-zinc-200'} ${!isSidebarOpen ? 'justify-center px-0' : ''}`}>
                   {isSidebarOpen ? (
                     <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
-                        <Sparkles className="w-4.5 h-4.5 animate-pulse" />
-                      </div>
+                      <SupportChatLogo className="w-8 h-8" />
                       <span className={`font-semibold text-sm tracking-wide ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>
-                        Sales Assistant
+                        Support History
                       </span>
                     </div>
                   ) : (
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-white shadow-md cursor-pointer" onClick={() => setIsSidebarOpen(true)}>
-                      <Sparkles className="w-4.5 h-4.5" />
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center cursor-pointer" onClick={() => setIsSidebarOpen(true)}>
+                      <SupportChatLogo className="w-7 h-7" />
                     </div>
                   )}
                   {isSidebarOpen && (
@@ -2547,15 +2546,15 @@ export default function Home() {
           id="chat-bubble-btn"
           onClick={() => {
             setIsChatOpen(true);
-            setToastMessage("Sales Assistant opened!");
+            setToastMessage("Sales Agent opened!");
             setTimeout(() => {
               inputRef.current?.focus();
             }, 150);
           }}
-          className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center shadow-2xl hover:scale-105 active:scale-95 transition-all z-40 cursor-pointer animate-bounce"
-          title="Open Sales Assistant"
+          className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-gradient-to-tr from-blue-600 via-sky-500 to-cyan-500 hover:scale-105 active:scale-95 transition-all z-40 cursor-pointer animate-bounce shadow-2xl p-1.5 flex items-center justify-center"
+          title="Open Sales Agent"
         >
-          <MessageSquare className="w-6 h-6" />
+          <SalesAgentLogo className="w-11 h-11 drop-shadow-md" />
         </button>
       )}
 

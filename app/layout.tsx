@@ -12,6 +12,11 @@ const roboto = Roboto({
 export const metadata: Metadata = {
   title: "ShopEase Support - 24/7 E-commerce Customer Assistant",
   description: "Get instant help with your ShopEase orders, shipping, returns, and product questions. Talk to our digital support engineer.",
+  icons: {
+    icon: "/logo-icon.svg",
+    shortcut: "/logo-icon.svg",
+    apple: "/logo-icon.svg",
+  },
 };
 
 export default function RootLayout({

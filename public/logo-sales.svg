@@ -1,0 +1,168 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="100"
+  height="100"
+  viewBox="0 0 100 100"
+  fill="none"
+>
+  <defs>
+    <!-- ShopEase sales gradient (Pure Blue to Cyan - No Violet) -->
+    <linearGradient
+      id="salesGradient"
+      x1="10"
+      y1="10"
+      x2="90"
+      y2="90"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop offset="0" stop-color="#3B82F6"/>
+      <stop offset="0.45" stop-color="#2563EB"/>
+      <stop offset="0.75" stop-color="#0EA5E9"/>
+      <stop offset="1" stop-color="#06B6D4"/>
+    </linearGradient>
+
+    <!-- Highlight -->
+    <linearGradient
+      id="salesHighlight"
+      x1="25"
+      y1="20"
+      x2="75"
+      y2="80"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop offset="0" stop-color="#93C5FD"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+
+    <!-- Shadow -->
+    <filter
+      id="salesShadow"
+      x="-20%"
+      y="-20%"
+      width="140%"
+      height="150%"
+    >
+      <feDropShadow
+        dx="0"
+        dy="4"
+        stdDeviation="4"
+        flood-opacity="0.18"
+      />
+    </filter>
+  </defs>
+
+  <!-- CHAT BUBBLE -->
+  <g filter="url(#salesShadow)">
+    <path
+      d="
+        M18 14
+        H75
+        C82 14 87 19 87 26
+        V61
+        C87 68 82 73 75 73
+        H49
+
+        L31 88
+        C29 90 26 89 26 86
+        V73
+
+        H18
+        C11 73 6 68 6 61
+        V26
+        C6 19 11 14 18 14
+        Z
+      "
+      fill="url(#salesGradient)"
+    />
+
+    <!-- Inner highlight -->
+    <path
+      d="
+        M19 21
+        H73
+        C77 21 80 24 80 29
+        V58
+        C80 62 77 65 73 65
+        H47
+
+        L32 77
+        V65
+        H19
+        C15 65 12 62 12 58
+        V29
+        C12 24 15 21 19 21
+        Z
+      "
+      fill="white"
+      opacity="0.07"
+    />
+  </g>
+
+  <!-- SALES S -->
+  <path
+    d="
+      M65 33
+
+      C62 29
+      57 27
+      51 27
+
+      C43 27
+      37 31
+      37 36
+
+      C37 42
+      42 44
+      51 47
+
+      C60 49
+      65 53
+      65 59
+
+      C65 66
+      59 70
+      51 70
+
+      C43 70
+      36 67
+      32 62
+    "
+    stroke="white"
+    stroke-width="5.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
+
+  <!-- CHAT DOTS -->
+  <circle
+    cx="24"
+    cy="45"
+    r="3"
+    fill="white"
+    opacity="0.9"
+  />
+
+  <circle
+    cx="81"
+    cy="82"
+    r="3"
+    fill="#22D3EE"
+  />
+
+  <!-- SALES / AI SPARK -->
+  <path
+    d="
+      M78 8
+      L81 14
+      L87 17
+      L81 20
+      L78 26
+      L75 20
+      L69 17
+      L75 14
+      Z
+    "
+    fill="url(#salesHighlight)"
+  />
+</svg>

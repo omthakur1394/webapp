@@ -1,0 +1,168 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="100"
+  height="100"
+  viewBox="0 0 100 100"
+  fill="none"
+>
+  <defs>
+    <!-- ShopEase support gradient -->
+    <linearGradient
+      id="supportGradient"
+      x1="8"
+      y1="10"
+      x2="90"
+      y2="90"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop offset="0" stop-color="#06B6D4"/>
+      <stop offset="0.45" stop-color="#0EA5E9"/>
+      <stop offset="0.75" stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#4F46E5"/>
+    </linearGradient>
+
+    <!-- Highlight -->
+    <linearGradient
+      id="supportHighlight"
+      x1="20"
+      y1="20"
+      x2="75"
+      y2="80"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop offset="0" stop-color="#67E8F9"/>
+      <stop offset="1" stop-color="#818CF8"/>
+    </linearGradient>
+
+    <filter
+      id="supportShadow"
+      x="-20%"
+      y="-20%"
+      width="140%"
+      height="150%"
+    >
+      <feDropShadow
+        dx="0"
+        dy="4"
+        stdDeviation="4"
+        flood-opacity="0.18"
+      />
+    </filter>
+  </defs>
+
+  <!-- CHAT BUBBLE -->
+  <g filter="url(#supportShadow)">
+    <path
+      d="
+        M18 12
+        H76
+        C84 12 90 18 90 26
+        V59
+        C90 67 84 73 76 73
+        H49
+
+        L31 88
+        C28 90 25 88 25 85
+        V73
+
+        H18
+        C10 73 4 67 4 59
+        V26
+        C4 18 10 12 18 12
+        Z
+      "
+      fill="url(#supportGradient)"
+    />
+  </g>
+
+  <!-- SUPPORT HEADSET -->
+  <path
+    d="
+      M27 48
+      V43
+      C27 30 36 22 47 22
+      C58 22 67 30 67 43
+      V48
+    "
+    stroke="white"
+    stroke-width="5"
+    stroke-linecap="round"
+    fill="none"
+  />
+
+  <rect
+    x="23"
+    y="43"
+    width="10"
+    height="18"
+    rx="5"
+    fill="white"
+  />
+
+  <rect
+    x="62"
+    y="43"
+    width="10"
+    height="18"
+    rx="5"
+    fill="white"
+  />
+
+  <path
+    d="
+      M67 59
+      C67 66 61 70 54 70
+      H49
+    "
+    stroke="white"
+    stroke-width="4"
+    stroke-linecap="round"
+    fill="none"
+  />
+
+  <circle
+    cx="47"
+    cy="70"
+    r="3"
+    fill="white"
+  />
+
+  <!-- CHAT DOTS -->
+  <circle
+    cx="17"
+    cy="31"
+    r="2.5"
+    fill="white"
+    opacity="0.65"
+  />
+
+  <circle
+    cx="82"
+    cy="25"
+    r="3"
+    fill="url(#supportHighlight)"
+  />
+
+  <!-- Small help accent -->
+  <path
+    d="
+      M78 72
+      C78 68 81 65 85 65
+      C89 65 92 68 92 72
+      C92 75 90 77 88 78
+      L88 81
+    "
+    stroke="white"
+    stroke-width="2.5"
+    stroke-linecap="round"
+    fill="none"
+    opacity="0.9"
+  />
+
+  <circle
+    cx="88"
+    cy="85"
+    r="1.8"
+    fill="white"
+  />
+</svg>

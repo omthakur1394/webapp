@@ -161,8 +161,8 @@ export default function GrievancePortalPage() {
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <div>
-            <h1 className="text-sm font-extrabold text-white flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-indigo-400" />
+            <h1 className="text-sm font-extrabold text-white flex items-center gap-2">
+              <img src="/logo-icon.svg" alt="ShopEase Logo" className="w-5 h-5 object-contain" />
               ShopEase Internal Grievance & Escalations Operations Dashboard
             </h1>
             <p className="text-[10px] text-zinc-500">Official Grievance Officer & Team Workflow Portal</p>
