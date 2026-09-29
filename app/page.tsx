@@ -1125,12 +1125,15 @@ export default function Home() {
   };
 
   const handleActionClick = (messageId: string, action: 'approve' | 'reject' | 'edit', isDrawerMode = false) => {
-    const updateSessionMessages = (prevSessions: ChatSession[]) =>
+    const actionVal: 'approved' | 'rejected' | 'edited' =
+      action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'edited';
+
+    const updateSessionMessages = (prevSessions: ChatSession[]): ChatSession[] =>
       prevSessions.map(s => ({
         ...s,
-        messages: s.messages.map(m =>
+        messages: s.messages.map((m): Message =>
           m.id === messageId
-            ? { ...m, actionTaken: action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'edited' }
+            ? { ...m, actionTaken: actionVal }
             : m
         )
       }));
