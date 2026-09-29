@@ -7,7 +7,7 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://omthakur:sxB1fxPqt50dd
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { chat, question, order_id, thread_id } = body;
+    const { chat, question, order_id, thread_id, user_id, username } = body;
 
     const finalQuestion = question || chat;
     const finalOrderId = order_id || "";
@@ -32,9 +32,21 @@ export async function POST(request: Request) {
           chat: finalQuestion,
           order_id: finalOrderId,
           thread_id: thread_id,
+          user_id: user_id || "",
+          username: username || "",
         },
         userAuthHeader
       );
+
+      if (response.status === 403) {
+        return NextResponse.json(
+          {
+            error: 'Order ownership mismatch',
+            res: '⚠️ This order does not belong to your account. Please check your Order ID.',
+          },
+          { status: 403 }
+        );
+      }
 
       if (response.ok) {
         hfData = await response.json();

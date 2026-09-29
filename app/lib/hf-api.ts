@@ -1,4 +1,4 @@
-const DEFAULT_HF_CHAT_URL = 'https://omthakur1394-shopease-self-rag.hf.space/chat';
+const DEFAULT_HF_CHAT_URL = 'https://omthakur1394-rag-api.hf.space/chat';
 
 export function getHfChatUrl(): string {
   return process.env.HF_API_CHAT_URL || process.env.HF_API_URL || DEFAULT_HF_CHAT_URL;

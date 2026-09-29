@@ -29,7 +29,13 @@ import {
   EyeOff,
   Inbox,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  Volume2,
+  VolumeX,
+  Phone,
+  PhoneOff,
+  RotateCcw,
+  FileText
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import productsData from './data/products.json';
@@ -193,7 +199,7 @@ export default function Home() {
   const [salesSessions, setSalesSessions] = useState<ChatSession[]>([]);
   const [activeSalesSessionId, setActiveSalesSessionId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [inputValue, setInputValue] = useState('');
@@ -211,13 +217,70 @@ export default function Home() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
 
-  // Voice recognition states & refs
+  // Voice recognition states & refs (browser fallback for Sales drawer)
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<any>(null);
   const initialInputRef = useRef<string>('');
 
-  // Storefront view state: 'shop', 'chat' (full-screen support chat), or 'grievance' (Grievance Redressal Portal)
-  const [activeView, setActiveView] = useState<'shop' | 'chat' | 'grievance'>('shop');
+  // ── Support Chat: Gate + Sarvam AI Voice ──
+  type SupportLang = 'en-IN' | 'hi-IN' | 'mr-IN';
+  const [supportGatePassed, setSupportGatePassed] = useState(false);
+  const [supportOrderId, setSupportOrderId] = useState('');
+  const [supportFirstMsg, setSupportFirstMsg] = useState('');
+  const [supportLang, setSupportLang] = useState<SupportLang>('en-IN');
+  const [supportGateError, setSupportGateError] = useState('');
+  const [isSarvamRecording, setIsSarvamRecording] = useState(false);
+  const [sarvamSpeakingId, setSarvamSpeakingId] = useState<string | null>(null);
+  const [sarvamTtsLoading, setSarvamTtsLoading] = useState<string | null>(null);
+  const [isSupportAutoSpeak, setIsSupportAutoSpeak] = useState(true);
+  const sarvamMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const sarvamAudioChunksRef = useRef<Blob[]>([]);
+  const sarvamCurrentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const sarvamSpeechRecRef = useRef<any>(null);
+  const sarvamRecStartTimeRef = useRef<number>(0);
+
+  // Gate voice typing states
+  const [isGateRecording, setIsGateRecording] = useState(false);
+  const gateMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const gateAudioChunksRef = useRef<Blob[]>([]);
+  const gateSpeechRecRef = useRef<any>(null);
+
+  // Pure Voice Wave & Call States
+  const [callDuration, setCallDuration] = useState(0);
+  const [showCaptions, setShowCaptions] = useState(false);
+  const [lastSpokenAnswer, setLastSpokenAnswer] = useState<{ text: string; id: string; lang: SupportLang } | null>(null);
+  const callTimerRef = useRef<any>(null);
+
+  const SUPPORT_LANGS: { code: SupportLang; native: string }[] = [
+    { code: 'en-IN', native: 'English' },
+    { code: 'hi-IN', native: 'हिन्दी' },
+    { code: 'mr-IN', native: 'मराठी' },
+  ];
+
+  function detectSupportLang(text: string): SupportLang {
+    if (!text) return 'en-IN';
+    if (!/[\u0900-\u097F]/.test(text)) return 'en-IN';
+    if (/\b(आहे|नाही|कसा|झाला|झाली|झाले|करा|माझा|तुमचा|होय|मिळेल|दिले|पाहिजे|केला|कृपया|धन्यवाद|आपण|त्यांना|कोणता|कधी)\b/i.test(text)) return 'mr-IN';
+    return 'hi-IN';
+  }
+
+  // Storefront view state: 'shop', 'chat', 'voice-support', or 'grievance'
+  const [activeView, setActiveView] = useState<'shop' | 'chat' | 'voice-support' | 'grievance'>('shop');
+
+  // Voice Call Duration Timer
+  useEffect(() => {
+    if (activeView === 'voice-support' && supportGatePassed) {
+      callTimerRef.current = setInterval(() => {
+        setCallDuration(s => s + 1);
+      }, 1000);
+    } else {
+      if (callTimerRef.current) clearInterval(callTimerRef.current);
+      setCallDuration(0);
+    }
+    return () => {
+      if (callTimerRef.current) clearInterval(callTimerRef.current);
+    };
+  }, [activeView, supportGatePassed]);
   
   // Storefront catalog states
   const [isChatOpen, setIsChatOpen] = useState(false); // Controls floating support chat drawer
@@ -232,6 +295,15 @@ export default function Home() {
   const [visibleCount, setVisibleCount] = useState(24);
   const [cartCount, setCartCount] = useState(0);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Auto-dismiss floating toast notifications after 3.5s
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => setToastMessage(null), 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [toastMessage]);
+
   const [buyProduct, setBuyProduct] = useState<Product | null>(null); // Order success modal target
   const [shippingAddress, setShippingAddress] = useState('');
   const [selectedHub, setSelectedHub] = useState<'Mumbai Hub' | 'Nagpur Hub' | ''>('');
@@ -701,23 +773,16 @@ export default function Home() {
         const rec = new SpeechRecognition();
         rec.continuous = false;
         rec.interimResults = false;
-        rec.lang = 'en-US';
+        rec.lang = 'en-IN';
 
-        rec.onstart = () => {
-          setIsListening(true);
-        };
-
-        rec.onend = () => {
-          setIsListening(false);
-        };
-
+        rec.onstart = () => { setIsListening(true); };
+        rec.onend = () => { setIsListening(false); };
         rec.onerror = (event: any) => {
           console.error('Speech recognition error:', event.error);
           setIsListening(false);
         };
-
         rec.onresult = (event: any) => {
-          let parts = [];
+          let parts: string[] = [];
           for (let i = 0; i < event.results.length; i++) {
             parts.push(event.results[i][0].transcript);
           }
@@ -725,16 +790,10 @@ export default function Home() {
           const base = initialInputRef.current.trim();
           setInputValue(base ? `${base} ${transcript}` : transcript);
         };
-
         recognitionRef.current = rec;
       }
     }
-
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.abort();
-      }
-    };
+    return () => { if (recognitionRef.current) { recognitionRef.current.abort(); } };
   }, []);
 
   const handleMicClick = () => {
@@ -742,7 +801,6 @@ export default function Home() {
       alert('Voice typing is not supported in this browser. Please try Google Chrome or Microsoft Edge.');
       return;
     }
-
     if (isListening) {
       recognitionRef.current.stop();
     } else {
@@ -752,6 +810,291 @@ export default function Home() {
       } catch (err) {
         console.error('Failed to start speech recognition:', err);
       }
+    }
+  };
+
+  // ── Sarvam AI TTS: plays a bot message aloud ──
+  const speakWithSarvam = async (text: string, messageId: string, langCode?: string) => {
+    if (sarvamSpeakingId === messageId) {
+      sarvamCurrentAudioRef.current?.pause();
+      sarvamCurrentAudioRef.current = null;
+      setSarvamSpeakingId(null);
+      return;
+    }
+    sarvamCurrentAudioRef.current?.pause();
+    sarvamCurrentAudioRef.current = null;
+    const lang = langCode || supportLang;
+    const cleanText = text.replace(/\[\d+\]/g, '').replace(/[*_#`~]/g, '').replace(/https?:\/\/\S+/g, '').replace(/\n+/g, ' ').trim();
+    if (!cleanText) return;
+    setSarvamTtsLoading(messageId);
+    try {
+      const res = await fetch('/api/sarvam/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: cleanText, language_code: lang }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.audio) throw new Error(data.error || 'TTS failed');
+      const byteChars = atob(data.audio);
+      const byteNums = new Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
+      const audioBlob = new Blob([new Uint8Array(byteNums)], { type: 'audio/wav' });
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      sarvamCurrentAudioRef.current = audio;
+      setSarvamSpeakingId(messageId);
+      setLastSpokenAnswer({ text: cleanText, id: messageId, lang: (lang as SupportLang) });
+      audio.play();
+      audio.onended = () => { setSarvamSpeakingId(null); sarvamCurrentAudioRef.current = null; URL.revokeObjectURL(audioUrl); };
+      audio.onerror = () => { setSarvamSpeakingId(null); sarvamCurrentAudioRef.current = null; };
+    } catch (err) {
+      console.error('Sarvam TTS error:', err);
+      setSarvamSpeakingId(null);
+    } finally {
+      setSarvamTtsLoading(null);
+    }
+  };
+
+  // ── Gate voice typing: Speak to type into first message box ──
+  const handleGateVoiceTyping = async () => {
+    if (isGateRecording) {
+      gateMediaRecorderRef.current?.stop();
+      if (gateSpeechRecRef.current) {
+        try { gateSpeechRecRef.current.stop(); } catch {}
+        gateSpeechRecRef.current = null;
+      }
+      setIsGateRecording(false);
+      return;
+    }
+    setSupportGateError('');
+
+    // Web Speech API for real-time word-by-word live typing
+    const SpeechRec = typeof window !== 'undefined' && ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+    if (SpeechRec) {
+      try {
+        const rec = new SpeechRec();
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.lang = supportLang;
+        let finalTxt = '';
+        rec.onresult = (e: any) => {
+          let interim = '';
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            if (e.results[i].isFinal) {
+              finalTxt += (finalTxt ? ' ' : '') + e.results[i][0].transcript;
+            } else {
+              interim += e.results[i][0].transcript;
+            }
+          }
+          const full = (finalTxt + ' ' + interim).trim();
+          if (full) setSupportFirstMsg(full);
+        };
+        rec.onerror = () => {};
+        rec.start();
+        gateSpeechRecRef.current = rec;
+      } catch (err) {
+        console.warn('SpeechRecognition failed:', err);
+      }
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      gateAudioChunksRef.current = [];
+      gateMediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) gateAudioChunksRef.current.push(e.data); };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        setIsGateRecording(false);
+        const blob = new Blob(gateAudioChunksRef.current, { type: 'audio/webm' });
+        if (blob.size < 1000) return;
+        const fd = new FormData();
+        fd.append('file', blob, 'audio.webm');
+        fd.append('language_code', supportLang);
+        fd.append('model', 'saaras:v3');
+        try {
+          const res = await fetch('/api/sarvam/stt', { method: 'POST', body: fd });
+          const data = await res.json();
+          if (data.transcript && data.transcript.trim()) {
+            setSupportFirstMsg(data.transcript.trim());
+          }
+        } catch (err) { console.error('Sarvam STT gate error:', err); }
+      };
+      recorder.start();
+      setIsGateRecording(true);
+    } catch (err: any) {
+      setIsGateRecording(false);
+      if (gateSpeechRecRef.current) {
+        try { gateSpeechRecRef.current.stop(); } catch {}
+        gateSpeechRecRef.current = null;
+      }
+      if (err.name === 'NotAllowedError') setToastMessage('⚠️ Microphone access denied. Please allow mic permission.');
+      else console.error('Gate mic error:', err);
+    }
+  };
+
+  // ── Send message in Voice Support and speak response ──
+  const sendVoiceSupportMessage = async (rawText: string) => {
+    const text = rawText.trim();
+    if (!text || isLoading) return;
+    const currentActiveId = activeSupportSessionId;
+    const userMsg: Message = { id: crypto.randomUUID(), role: 'user', content: text, timestamp: new Date() };
+    setSupportSessions(prev => prev.map(s => s.id === currentActiveId ? { ...s, messages: [...s.messages, userMsg], updatedAt: new Date() } : s));
+    setInputValue('');
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: text,
+          order_id: supportOrderId.toUpperCase(),
+          thread_id: currentActiveId,
+          user_id: currentUser?.id?.toString() || '',
+          username: currentUser?.username || '',
+        })
+      });
+
+      if (res.status === 403) {
+        const forbiddenMsg = supportLang === 'hi-IN'
+          ? 'यह ऑर्डर आपके खाते से संबंधित नहीं है। कृपया अपना ऑर्डर ID चेक करें।'
+          : supportLang === 'mr-IN'
+          ? 'हा ऑर्डर आपल्या खात्याशी संबंधित नाही. कृपया आपला ऑर्डर ID तपासा.'
+          : '⚠️ This order does not belong to your account. Please check your Order ID.';
+        const botMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: forbiddenMsg, timestamp: new Date() };
+        setSupportSessions(prev => prev.map(s => s.id === currentActiveId ? { ...s, messages: [...s.messages, botMsg], updatedAt: new Date() } : s));
+        speakWithSarvam(forbiddenMsg, botMsg.id, supportLang);
+        return;
+      }
+
+      if (!res.ok) throw new Error('API error');
+      const data = await res.json();
+      const cleaned = cleanCitation(data.res || '');
+      const botMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: cleaned, timestamp: new Date() };
+      setSupportSessions(prev => prev.map(s => s.id === currentActiveId ? { ...s, messages: [...s.messages, botMsg], updatedAt: new Date() } : s));
+      if (cleaned) {
+        speakWithSarvam(cleaned, botMsg.id, detectSupportLang(cleaned));
+      }
+    } catch (err) {
+      console.error('Chat error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // ── Sarvam AI STT: MediaRecorder → /api/sarvam/stt ──
+  const handleSarvamMic = async () => {
+    if (isSarvamRecording) {
+      sarvamMediaRecorderRef.current?.stop();
+      if (sarvamSpeechRecRef.current) {
+        try { sarvamSpeechRecRef.current.stop(); } catch {}
+        sarvamSpeechRecRef.current = null;
+      }
+      setIsSarvamRecording(false);
+      return;
+    }
+
+    // Web Speech API for real-time word-by-word typing into active chat input
+    const SpeechRec = typeof window !== 'undefined' && ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+    if (SpeechRec) {
+      try {
+        const rec = new SpeechRec();
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.lang = supportLang;
+        let finalTxt = '';
+        rec.onresult = (e: any) => {
+          let interim = '';
+          for (let i = e.resultIndex; i < e.results.length; i++) {
+            if (e.results[i].isFinal) {
+              finalTxt += (finalTxt ? ' ' : '') + e.results[i][0].transcript;
+            } else {
+              interim += e.results[i][0].transcript;
+            }
+          }
+          const full = (finalTxt + ' ' + interim).trim();
+          if (full) setInputValue(full);
+        };
+        rec.onerror = () => {};
+        rec.start();
+        sarvamSpeechRecRef.current = rec;
+      } catch (err) {
+        console.warn('SpeechRecognition failed:', err);
+      }
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      sarvamAudioChunksRef.current = [];
+      sarvamMediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) sarvamAudioChunksRef.current.push(e.data); };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        setIsSarvamRecording(false);
+        const recordDuration = Date.now() - (sarvamRecStartTimeRef.current || 0);
+        const blob = new Blob(sarvamAudioChunksRef.current, { type: 'audio/webm' });
+
+        if (recordDuration < 600 || blob.size < 1200) {
+          const fallback = inputRef.current?.value?.trim() || inputValue.trim();
+          if (fallback) {
+            sendVoiceSupportMessage(fallback);
+          } else {
+            const shortMsg = supportLang === 'hi-IN'
+              ? '⚠️ रिकॉर्डिंग बहुत छोटी थी। कृपया माइक दबाकर साफ़ बोलें।'
+              : supportLang === 'mr-IN'
+              ? '⚠️ रेकॉर्डिंग खूप लहान होती. कृपया माइक दाबून स्पष्ट बोला.'
+              : '⚠️ Too short! Please tap the mic and speak clearly.';
+            setToastMessage(shortMsg);
+          }
+          return;
+        }
+
+        const fd = new FormData();
+        fd.append('file', blob, 'audio.webm');
+        fd.append('language_code', supportLang);
+        fd.append('model', 'saaras:v3');
+        try {
+          const res = await fetch('/api/sarvam/stt', { method: 'POST', body: fd });
+          const data = await res.json();
+          const transcript = data.transcript && data.transcript.trim();
+          if (transcript) {
+            setInputValue(transcript);
+            sendVoiceSupportMessage(transcript);
+          } else {
+            const fallback = inputRef.current?.value?.trim() || inputValue.trim();
+            if (fallback) {
+              sendVoiceSupportMessage(fallback);
+            } else {
+              const noSpeechMsg = supportLang === 'hi-IN'
+                ? '⚠️ आवाज़ सुनाई नहीं दी। कृपया दोबारा बोलें।'
+                : supportLang === 'mr-IN'
+                ? '⚠️ आवाज ऐकू आला नाही. कृपया पुन्हा बोला.'
+                : '⚠️ No speech detected. Please tap the mic and try again.';
+              setToastMessage(noSpeechMsg);
+            }
+          }
+        } catch (err) { 
+          console.error('Sarvam STT error:', err);
+          const fallback = inputRef.current?.value?.trim() || inputValue.trim();
+          if (fallback) {
+            sendVoiceSupportMessage(fallback);
+          } else {
+            setToastMessage('⚠️ Speech recognition error. Please check your mic and try again.');
+          }
+        }
+      };
+      sarvamRecStartTimeRef.current = Date.now();
+      recorder.start();
+      setIsSarvamRecording(true);
+    } catch (err: any) {
+      setIsSarvamRecording(false);
+      if (sarvamSpeechRecRef.current) {
+        try { sarvamSpeechRecRef.current.stop(); } catch {}
+        sarvamSpeechRecRef.current = null;
+      }
+      if (err.name === 'NotAllowedError') setToastMessage('⚠️ Microphone access denied. Please allow mic permission.');
+      else console.error('Sarvam mic error:', err);
     }
   };
 
@@ -777,6 +1120,7 @@ export default function Home() {
   const cleanCitation = (text: string): string => {
     return text.replace(/\[\d+\]/g, '').replace(/\s+/g, ' ').trim();
   };  const handleSendMessage = async (text: string, isDrawerMode = false) => {
+
     if (!text.trim() || isLoading) return;
 
     if (isDrawerMode) {
@@ -956,9 +1300,32 @@ export default function Home() {
           body: JSON.stringify({
             question: text,
             order_id: extractedOrderId,
-            thread_id: currentSessionId
+            thread_id: currentSessionId,
+            user_id: currentUser?.id?.toString() || '',
+            username: currentUser?.username || '',
           })
         });
+
+        if (response.status === 403) {
+          const forbiddenMsg = '⚠️ This order does not belong to your account. Please check your Order ID.';
+          const botMessage: Message = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: forbiddenMsg,
+            timestamp: new Date()
+          };
+          setSupportSessions(prev => prev.map(s => {
+            if (s.id === currentSessionId) {
+              return {
+                ...s,
+                messages: [...s.messages, botMessage],
+                updatedAt: new Date()
+              };
+            }
+            return s;
+          }));
+          return;
+        }
 
         if (!response.ok) {
           throw new Error(`API returned status ${response.status}`);
@@ -1429,8 +1796,9 @@ export default function Home() {
         <div 
           ref={chatContainerRef}
           onScroll={handleScroll}
-          className={`flex-1 overflow-y-auto px-4 py-6 md:p-6 space-y-5 relative transition-colors duration-300 ${theme === 'dark' ? 'bg-zinc-950/20' : 'bg-zinc-55/30'}`}
+          className={`flex-1 overflow-y-auto px-4 py-6 md:p-6 space-y-5 relative transition-colors duration-300 ${theme === 'dark' ? 'bg-zinc-950/40' : 'bg-zinc-55/30'}`}
         >
+          <div className="max-w-4xl mx-auto w-full space-y-5">
           {messages.map((message) => {
             const isBot = message.role === 'assistant';
             
@@ -1448,7 +1816,7 @@ export default function Home() {
               <div
                 key={message.id}
                 className={`flex gap-3 transition-all duration-300 animate-fadeIn ${
-                  isDrawerMode ? 'max-w-[95%]' : 'max-w-[85%] sm:max-w-[75%]'
+                  isDrawerMode ? 'max-w-[95%]' : 'max-w-[85%] sm:max-w-[80%]'
                 } ${
                   isBot ? 'mr-auto' : 'ml-auto flex-row-reverse'
                 }`}
@@ -1467,10 +1835,12 @@ export default function Home() {
                 {/* Message Bubble Column */}
                 <div className="flex flex-col gap-1 group max-w-full">
                   <div
-                    className={`relative px-3.5 py-2.5 rounded-2xl text-xs leading-relaxed shadow-sm ${
+                    className={`relative px-4 py-3 rounded-2xl text-xs leading-relaxed shadow-sm ${
                       isBot
-                        ? (theme === 'dark' ? 'bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-tl-none' : 'bg-white border border-zinc-200 text-zinc-800 rounded-tl-none')
-                        : 'bg-indigo-600 text-white rounded-tr-none font-medium'
+                        ? message.content.includes('⚠️')
+                          ? (theme === 'dark' ? 'bg-amber-950/25 border border-amber-500/40 text-amber-200 rounded-tl-none' : 'bg-amber-50 border border-amber-300 text-amber-900 rounded-tl-none')
+                          : (theme === 'dark' ? 'bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-tl-none' : 'bg-white border border-zinc-200 text-zinc-800 rounded-tl-none')
+                        : 'bg-indigo-600 text-white rounded-tr-none font-medium shadow-md shadow-indigo-600/20'
                     }`}
                   >
                     {isBot ? (
@@ -1596,6 +1966,7 @@ export default function Home() {
           )}
 
           <div ref={messagesEndRef} />
+          </div>
         </div>
 
         {/* Scroll Button */}
@@ -1647,7 +2018,7 @@ export default function Home() {
                 <Send className="w-4 h-4" />
               </button>
             </form>
-            <p className={`text-[9px] mt-2.5 text-center flex items-center justify-between px-1 ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
+            <p className={`text-[9px] mt-2 text-center flex items-center justify-between px-1 ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
               <span className="flex items-center gap-0.5 text-indigo-650 font-medium">
                 <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" /> SSL Shield Active
               </span>
@@ -1909,6 +2280,11 @@ export default function Home() {
             </button>
             <button
               onClick={() => {
+                if (sarvamCurrentAudioRef.current) {
+                  sarvamCurrentAudioRef.current.pause();
+                  sarvamCurrentAudioRef.current = null;
+                  setSarvamSpeakingId(null);
+                }
                 setIsChatOpen(false);
                 setActiveView('chat');
               }}
@@ -1919,6 +2295,24 @@ export default function Home() {
               }`}
             >
               Support Chat
+            </button>
+            <button
+              id="nav-voice-support"
+              onClick={() => {
+                setIsChatOpen(false);
+                setSupportGatePassed(false);
+                setSupportOrderId('');
+                setSupportFirstMsg('');
+                setSupportGateError('');
+                setActiveView('voice-support');
+              }}
+              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                activeView === 'voice-support'
+                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-sm'
+                  : 'text-zinc-650 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+              }`}
+            >
+              🎤 Voice Support
             </button>
           </div>
 
@@ -2270,8 +2664,8 @@ export default function Home() {
                           key={session.id}
                           onClick={() => setActiveSupportSessionId(session.id)}
                           className={`
-                            w-full flex justify-center py-2.5 rounded-xl transition-all cursor-pointer mb-1
-                            ${isActive ? (theme === 'dark' ? 'bg-indigo-650/15 text-indigo-405' : 'bg-indigo-50 text-indigo-600') : (theme === 'dark' ? 'text-zinc-500 hover:bg-zinc-900 hover:text-white' : 'text-zinc-500 hover:bg-zinc-200 hover:text-zinc-900')}
+                            w-10 h-10 mx-auto rounded-xl flex items-center justify-center transition-all cursor-pointer mb-2
+                            ${isActive ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30' : (theme === 'dark' ? 'text-zinc-400 hover:bg-zinc-800 hover:text-white' : 'text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900')}
                           `}
                           title={session.title}
                         >
@@ -2309,6 +2703,459 @@ export default function Home() {
 
             {/* Main Chat Interface */}
             {renderChatWindow(false)}
+          </div>
+        ) : activeView === 'voice-support' ? (
+          // Voice Support — gate + Sarvam AI voice chat
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {!supportGatePassed ? (
+              // ── Gate Screen: Order ID & Language Only (Zero Typing) ──
+              <section className={`flex-1 flex flex-col items-center justify-center h-full overflow-auto px-4 py-8 transition-colors duration-300 ${theme === 'dark' ? 'bg-zinc-950' : 'bg-zinc-50'}`}>
+                <div className={`w-full max-w-md rounded-3xl border shadow-2xl p-8 transition-all ${theme === 'dark' ? 'bg-zinc-900/90 border-zinc-800' : 'bg-white border-zinc-200'}`}>
+                  <div className="flex flex-col items-center gap-3 mb-6">
+                    <div className="relative">
+                      <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-600 via-violet-600 to-cyan-500 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+                        <Phone className="w-8 h-8 text-white animate-pulse" />
+                      </div>
+                      <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white dark:border-zinc-900 animate-ping" />
+                    </div>
+                    <div className="text-center mt-1">
+                      <h2 className={`text-2xl font-extrabold tracking-tight ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>
+                        {supportLang === 'hi-IN' ? 'वॉइस सपोर्ट' : supportLang === 'mr-IN' ? 'व्हॉइस सपोर्ट' : 'Voice Support'}
+                      </h2>
+                      <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                        {supportLang === 'hi-IN' ? '100% हैंड्स-फ्री कॉल · कोई टाइपिंग नहीं' : supportLang === 'mr-IN' ? '100% हँड्स-फ्री कॉल · कोणतीही टायपिंग नाही' : '100% Hands-Free AI Call · Zero Typing'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Language Selector */}
+                  <div className="mb-6">
+                    <label className={`text-[11px] font-bold mb-2 flex items-center gap-1.5 uppercase tracking-wider ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                      🌐 {supportLang === 'hi-IN' ? 'भाषा चुनें' : supportLang === 'mr-IN' ? 'भाषा निवडा' : 'Select Language'}
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {SUPPORT_LANGS.map(lang => (
+                        <button
+                          key={lang.code}
+                          type="button"
+                          onClick={() => setSupportLang(lang.code)}
+                          className={`py-3 rounded-2xl text-xs font-bold border transition-all cursor-pointer ${
+                            supportLang === lang.code
+                              ? 'bg-gradient-to-r from-indigo-600 to-violet-600 border-indigo-500 text-white shadow-md shadow-indigo-600/20 scale-[1.02]'
+                              : (theme === 'dark' ? 'bg-zinc-800/80 border-zinc-700/80 text-zinc-400 hover:text-white hover:bg-zinc-800' : 'bg-zinc-50 border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100')
+                          }`}
+                        >
+                          {lang.native}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Order ID Form */}
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    setSupportGateError('');
+                    const trimId = supportOrderId.trim().toUpperCase();
+                    if (!trimId) {
+                      setSupportGateError(supportLang === 'hi-IN' ? 'कृपया अपना ऑर्डर ID दर्ज करें।' : supportLang === 'mr-IN' ? 'कृपया तुमचा ऑर्डर ID टाका.' : 'Please enter your Order ID.');
+                      return;
+                    }
+
+                    // Check order existence and account ownership
+                    try {
+                      const chkRes = await fetch(`/api/order/details?order_id=${encodeURIComponent(trimId)}`);
+                      if (!chkRes.ok) {
+                        setSupportGateError(supportLang === 'hi-IN' ? 'ऑर्डर नहीं मिला। कृपया सही ऑर्डर ID दर्ज करें।' : supportLang === 'mr-IN' ? 'ऑर्डर सापडला नाही. कृपया वैध ऑर्डर ID टाका.' : 'Order not found. Please enter a valid Order ID.');
+                        return;
+                      }
+                      const orderData = await chkRes.json();
+                      const currentUserId = currentUser?.id?.toString() || '';
+                      const currentUsername = currentUser?.username?.toLowerCase() || '';
+                      const orderUserId = (orderData.user_id || '').toString();
+                      const orderUsername = (orderData.username || '').toLowerCase();
+
+                      const isMismatch = (orderUserId && currentUserId && orderUserId !== currentUserId) ||
+                                         (orderUsername && currentUsername && orderUsername !== currentUsername);
+                      if (isMismatch) {
+                        setSupportGateError(supportLang === 'hi-IN'
+                          ? 'यह ऑर्डर आपके खाते से संबंधित नहीं है। कृपया वापस जाएं या अपना ऑर्डर चेक करें।'
+                          : supportLang === 'mr-IN'
+                          ? 'हा ऑर्डर आपल्या खात्याशी संबंधित नाही. कृपया आपला ऑर्डर ID तपासा.'
+                          : '⚠️ This order does not belong to your account. Please check your Order ID.');
+                        return;
+                      }
+                    } catch (chkErr) {
+                      console.warn('Pre-check failed, continuing to server check:', chkErr);
+                    }
+
+                    setSupportGatePassed(true);
+                    const currentActiveId = activeSupportSessionId;
+                    const welcomeText = supportLang === 'hi-IN'
+                      ? `नमस्ते! ऑर्डर #${trimId} के लिए शॉपईज़ वॉइस सपोर्ट में आपका स्वागत है। मैं आपकी क्या मदद कर सकता हूँ?`
+                      : supportLang === 'mr-IN'
+                      ? `नमस्कार! ऑर्डर #${trimId} साठी शॉपईझ व्हॉइस सपोर्टमध्ये आपले स्वागत आहे. मी आपली काय मदत करू शकतो?`
+                      : `Hello! Welcome to ShopEase Voice Support for order #${trimId}. How can I assist you with your order today?`;
+                    const botMsg: Message = { id: crypto.randomUUID(), role: 'assistant', content: welcomeText, timestamp: new Date() };
+                    setSupportSessions(prev => prev.map(s => s.id === currentActiveId ? { ...s, title: `Order ${trimId}`, messages: [botMsg], updatedAt: new Date() } : s));
+                    if (isSupportAutoSpeak) {
+                      speakWithSarvam(welcomeText, botMsg.id, supportLang);
+                    }
+                  }} className="flex flex-col gap-4">
+                    <div>
+                      <label className={`text-[11px] font-bold mb-1.5 flex items-center gap-1.5 uppercase tracking-wider ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                        📦 {supportLang === 'hi-IN' ? 'ऑर्डर ID दर्ज करें' : supportLang === 'mr-IN' ? 'ऑर्डर ID टाका' : 'Enter Order ID'} <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        id="voice-support-order-id"
+                        type="text"
+                        value={supportOrderId}
+                        onChange={e => setSupportOrderId(e.target.value)}
+                        placeholder="e.g. ORD-7929A9B9"
+                        autoComplete="off"
+                        className={`w-full rounded-2xl px-4 py-3.5 text-sm font-medium border focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all ${
+                          theme === 'dark' ? 'bg-zinc-950 border-zinc-800 text-white placeholder-zinc-500' : 'bg-zinc-50 border-zinc-200 text-zinc-900 placeholder-zinc-400'
+                        }`}
+                      />
+                    </div>
+
+                    {supportGateError && (
+                      <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-xl px-3.5 py-2.5 text-red-500 text-xs">
+                        <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                        {supportGateError}
+                      </div>
+                    )}
+
+                    <button
+                      id="voice-support-submit"
+                      type="submit"
+                      className="w-full mt-2 py-4 rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-600 hover:from-indigo-500 hover:to-violet-500 text-white font-extrabold text-sm transition-all shadow-xl shadow-indigo-600/30 active:scale-[0.98] flex items-center justify-center gap-2.5 cursor-pointer"
+                    >
+                      <Phone className="w-4 h-4 animate-bounce" />
+                      {supportLang === 'hi-IN' ? 'वॉइस कॉल शुरू करें' : supportLang === 'mr-IN' ? 'व्हॉइस कॉल सुरू करा' : 'Start Voice Call'}
+                    </button>
+                  </form>
+
+                  <div className={`mt-6 pt-5 border-t flex items-center justify-between text-[11px] ${theme === 'dark' ? 'border-zinc-800 text-zinc-500' : 'border-zinc-100 text-zinc-400'}`}>
+                    <span className="flex items-center gap-1 font-medium"><ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> End-to-End Encrypted</span>
+                    <span>Powered by Sarvam AI</span>
+                  </div>
+                </div>
+              </section>
+            ) : (
+              // ── Pure Voice Call Room with Dynamic Animated Waveform (Zero Keyboard) ──
+              <section className={`flex-1 flex flex-col h-full overflow-hidden transition-colors duration-300 relative select-none ${
+                theme === 'dark' ? 'bg-gradient-to-b from-zinc-950 via-zinc-900 to-zinc-950 text-white' : 'bg-gradient-to-b from-zinc-50 via-white to-zinc-100 text-zinc-900'
+              }`}>
+                {/* Header: Call Status, Language, End Call */}
+                <header className={`flex items-center justify-between px-6 py-4 border-b flex-shrink-0 backdrop-blur-md ${
+                  theme === 'dark' ? 'bg-zinc-900/60 border-zinc-800' : 'bg-white/70 border-zinc-200'
+                }`}>
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center shadow-md">
+                        <Phone className="w-5 h-5 text-white" />
+                      </div>
+                      <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white dark:border-zinc-900 animate-pulse" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="font-bold text-sm sm:text-base leading-none">
+                          {supportLang === 'hi-IN' ? 'शॉपईज़ वॉइस कॉल' : supportLang === 'mr-IN' ? 'शॉपईझ व्हॉइस कॉल' : 'ShopEase Voice Call'}
+                        </h2>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                          {String(Math.floor(callDuration / 60)).padStart(2, '0')}:{String(callDuration % 60).padStart(2, '0')}
+                        </span>
+                      </div>
+                      <p className={`text-[11px] mt-1 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                        Order: <span className="font-bold text-indigo-500">{supportOrderId.toUpperCase()}</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {/* Language Switcher */}
+                    <div className={`flex items-center gap-0.5 p-0.5 rounded-xl border ${theme === 'dark' ? 'bg-zinc-800/80 border-zinc-700' : 'bg-zinc-100 border-zinc-200'}`}>
+                      {SUPPORT_LANGS.map(lang => (
+                        <button
+                          key={lang.code}
+                          onClick={() => setSupportLang(lang.code)}
+                          className={`px-2.5 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                            supportLang === lang.code ? 'bg-indigo-600 text-white shadow-sm' : (theme === 'dark' ? 'text-zinc-400 hover:text-white' : 'text-zinc-600 hover:text-zinc-900')
+                          }`}
+                        >
+                          {lang.native}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Subtitles Toggle */}
+                    <button
+                      onClick={() => setShowCaptions(p => !p)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold border rounded-xl transition-all cursor-pointer ${
+                        showCaptions
+                          ? 'bg-indigo-600/20 border-indigo-500 text-indigo-400'
+                          : (theme === 'dark' ? 'text-zinc-400 bg-zinc-800/80 border-zinc-700 hover:text-white' : 'text-zinc-600 bg-zinc-50 border-zinc-200 hover:text-zinc-900')
+                      }`}
+                      title={showCaptions ? 'Hide Subtitles' : 'Show Subtitles'}
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">{showCaptions ? 'Subtitles: ON' : 'Subtitles: OFF'}</span>
+                    </button>
+
+                    {/* End Call Button */}
+                    <button
+                      onClick={() => {
+                        if (sarvamSpeakingId) {
+                          sarvamCurrentAudioRef.current?.pause();
+                          sarvamCurrentAudioRef.current = null;
+                          setSarvamSpeakingId(null);
+                        }
+                        if (isSarvamRecording) {
+                          sarvamMediaRecorderRef.current?.stop();
+                          setIsSarvamRecording(false);
+                        }
+                        setSupportGatePassed(false);
+                        setSupportOrderId('');
+                        setSupportGateError('');
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-500 rounded-xl transition-all shadow-md shadow-red-600/20 cursor-pointer active:scale-95"
+                    >
+                      <PhoneOff className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">End Call</span>
+                    </button>
+                  </div>
+                </header>
+
+                {/* Central Visualizer: Dynamic Audio Waveform & Glowing Voice Orb */}
+                <div className="flex-1 flex flex-col items-center justify-center p-6 relative overflow-hidden">
+                  {/* Glowing Ambient Background Glow */}
+                  <div className={`absolute w-80 h-80 sm:w-[480px] sm:h-[480px] rounded-full blur-[90px] transition-all duration-700 pointer-events-none opacity-30 ${
+                    isSarvamRecording ? 'bg-red-500 scale-125' :
+                    isLoading ? 'bg-amber-500 scale-110' :
+                    sarvamSpeakingId ? 'bg-indigo-500 scale-125' :
+                    'bg-violet-600/40'
+                  }`} />
+
+                  {/* Outer Pulsing Waveform Ring */}
+                  <div className="relative flex items-center justify-center">
+                    <div className={`w-60 h-60 sm:w-72 sm:h-72 rounded-full border flex items-center justify-center transition-all duration-700 ${
+                      isSarvamRecording ? 'border-red-500/40 shadow-[0_0_80px_rgba(239,68,68,0.35)] scale-105' :
+                      isLoading ? 'border-amber-500/40 shadow-[0_0_70px_rgba(245,158,11,0.35)] animate-spin' :
+                      sarvamSpeakingId ? 'border-indigo-500/50 shadow-[0_0_90px_rgba(99,102,241,0.45)] scale-105' :
+                      'border-violet-500/25 shadow-[0_0_40px_rgba(139,92,246,0.15)]'
+                    }`}>
+                      {/* Secondary Ring */}
+                      <div className={`w-48 h-48 sm:w-56 sm:h-56 rounded-full border border-dashed flex items-center justify-center transition-all duration-500 ${
+                        isSarvamRecording ? 'border-red-400/50 scale-105' :
+                        sarvamSpeakingId ? 'border-indigo-400/60 scale-105' :
+                        'border-white/10'
+                      }`}>
+                        {/* Central Glowing Voice Orb */}
+                        <div
+                          onClick={() => {
+                            if (sarvamSpeakingId) {
+                              sarvamCurrentAudioRef.current?.pause();
+                              sarvamCurrentAudioRef.current = null;
+                              setSarvamSpeakingId(null);
+                              handleSarvamMic();
+                            } else if (isSarvamRecording) {
+                              handleSarvamMic();
+                            } else if (!isLoading) {
+                              handleSarvamMic();
+                            }
+                          }}
+                          className={`w-36 h-36 sm:w-44 sm:h-44 rounded-full flex flex-col items-center justify-center cursor-pointer transition-all duration-300 shadow-2xl active:scale-95 bg-gradient-to-tr ${
+                            isSarvamRecording
+                              ? 'from-red-600 via-rose-500 to-amber-500 shadow-red-500/50 scale-110'
+                              : isLoading
+                              ? 'from-amber-600 via-orange-500 to-yellow-400 shadow-amber-500/40 animate-pulse'
+                              : sarvamSpeakingId
+                              ? 'from-indigo-600 via-purple-500 to-cyan-400 shadow-indigo-500/60 scale-110'
+                              : 'from-zinc-800 via-indigo-950 to-zinc-900 hover:from-indigo-900 hover:to-zinc-800 border-2 border-indigo-500/30 shadow-indigo-500/20'
+                          }`}
+                        >
+                          {/* Animated Sound Wave Equalizer Bars */}
+                          <div className="flex items-center justify-center gap-1 sm:gap-1.5 h-16 px-4">
+                            {[...Array(20)].map((_, i) => {
+                              const isCenter = Math.abs(i - 9.5) < 5;
+                              return (
+                                <div
+                                  key={i}
+                                  className={`w-1 sm:w-1.5 rounded-full transition-all duration-150 ${
+                                    isSarvamRecording ? 'bg-white' :
+                                    isLoading ? 'bg-amber-100' :
+                                    sarvamSpeakingId ? 'bg-white' :
+                                    'bg-indigo-300/40'
+                                  }`}
+                                  style={{
+                                    height: isSarvamRecording
+                                      ? `${Math.max(12, Math.sin(Date.now() / 120 + i) * 48 + 32)}px`
+                                      : sarvamSpeakingId
+                                      ? `${Math.max(14, Math.cos(Date.now() / 100 + i * 0.4) * 52 + 36)}px`
+                                      : isLoading
+                                      ? `${Math.max(10, Math.sin(i * 0.7) * 28 + 18)}px`
+                                      : isCenter ? '14px' : '8px',
+                                    animation: isSarvamRecording
+                                      ? `wavePulse 0.7s ease-in-out ${i * 0.04}s infinite alternate`
+                                      : sarvamSpeakingId
+                                      ? `wavePulse 0.55s ease-in-out ${i * 0.03}s infinite alternate`
+                                      : isLoading
+                                      ? `wavePulse 1.1s ease-in-out ${i * 0.06}s infinite alternate`
+                                      : 'none'
+                                  }}
+                                />
+                              );
+                            })}
+                          </div>
+                          <span className="text-[10px] font-bold text-white/90 uppercase tracking-widest mt-1">
+                            {isSarvamRecording ? 'Stop' : sarvamSpeakingId ? 'Interrupt' : isLoading ? 'Thinking' : 'Tap Mic'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Status Indicator & Live Guidance */}
+                  <div className="mt-8 text-center max-w-md">
+                    <h3 className="text-xl sm:text-2xl font-black tracking-tight flex items-center justify-center gap-2">
+                      {isSarvamRecording && (
+                        <span className="flex items-center gap-2 text-red-500 dark:text-red-400 animate-pulse">
+                          <span className="w-3 h-3 rounded-full bg-red-500 animate-ping" />
+                          {supportLang === 'hi-IN' ? 'सुन रहे हैं... बोलिए' : supportLang === 'mr-IN' ? 'ऐकत आहे... बोला' : 'Listening… Speak now'}
+                        </span>
+                      )}
+                      {isLoading && (
+                        <span className="flex items-center gap-2 text-amber-500 dark:text-amber-400">
+                          <RefreshCw className="w-5 h-5 animate-spin" />
+                          {supportLang === 'hi-IN' ? 'सोच रहे हैं...' : supportLang === 'mr-IN' ? 'विचार करत आहे...' : 'Thinking…'}
+                        </span>
+                      )}
+                      {sarvamSpeakingId && (
+                        <span className="flex items-center gap-2 text-indigo-500 dark:text-indigo-400">
+                          <Volume2 className="w-5 h-5 animate-pulse" />
+                          {supportLang === 'hi-IN' ? 'असिस्टेंट बोल रहा है...' : supportLang === 'mr-IN' ? 'असिस्टंट बोलत आहे...' : 'Assistant is speaking…'}
+                        </span>
+                      )}
+                      {!isSarvamRecording && !isLoading && !sarvamSpeakingId && (
+                        <span className={theme === 'dark' ? 'text-zinc-200' : 'text-zinc-800'}>
+                          {supportLang === 'hi-IN' ? 'माइक पर टैप करके बोलें' : supportLang === 'mr-IN' ? 'माइकवर टॅप करून बोला' : 'Tap to speak'}
+                        </span>
+                      )}
+                    </h3>
+
+                    <p className={`text-xs mt-2 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                      {isSarvamRecording
+                        ? (supportLang === 'hi-IN' ? 'आपकी आवाज़ रिकॉर्ड हो रही है। बोलने के बाद बीच वाले बटन पर टैप करें।' : supportLang === 'mr-IN' ? 'आपला आवाज रेकॉर्ड होत आहे. बोलून झाल्यावर मधल्या बटणावर टॅप करा.' : 'Listening to your voice. Tap the orb when done speaking.')
+                        : sarvamSpeakingId
+                        ? (supportLang === 'hi-IN' ? 'नया सवाल पूछने के लिए कभी भी बीच वाले बटन पर टैप करें।' : supportLang === 'mr-IN' ? 'नवीन प्रश्न विचारण्यासाठी कधीही मधल्या बटणावर टॅप करा.' : 'Tap the orb anytime to interrupt and speak a new question.')
+                        : (supportLang === 'hi-IN' ? 'प्योर हैंड्स-फ्री कॉल। कोई कीबोर्ड नहीं, सिर्फ बोलें और सुनें।' : supportLang === 'mr-IN' ? 'प्युअर हँड्स-फ्री कॉल. कीबोर्ड नाही, फक्त बोला आणि ऐका.' : 'Pure hands-free call. No keyboard, just talk naturally.')}
+                    </p>
+
+                    {/* Optional Captions Card */}
+                    {showCaptions && (
+                      <div className={`mt-5 p-4 rounded-2xl border text-left text-xs max-h-36 overflow-y-auto backdrop-blur-md transition-all shadow-lg ${
+                        theme === 'dark' ? 'bg-zinc-900/80 border-zinc-800 text-zinc-300' : 'bg-white/80 border-zinc-200 text-zinc-700'
+                      }`}>
+                        {(() => {
+                          const sess = supportSessions.find(s => s.id === activeSupportSessionId);
+                          const lastMsg = sess?.messages[sess.messages.length - 1];
+                          if (!lastMsg) return <p className="text-zinc-500 italic">No subtitles yet.</p>;
+                          return (
+                            <div>
+                              <span className="font-bold text-indigo-500 block mb-1">
+                                {lastMsg.role === 'assistant' ? '🤖 Assistant:' : '👤 You:'}
+                              </span>
+                              <p className="leading-relaxed whitespace-pre-wrap">{lastMsg.content}</p>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Bottom Call Controls Dock */}
+                <footer className={`border-t px-6 py-6 flex-shrink-0 backdrop-blur-md flex items-center justify-center gap-6 ${
+                  theme === 'dark' ? 'bg-zinc-900/70 border-zinc-800' : 'bg-white/80 border-zinc-200'
+                }`}>
+                  {/* Replay Last Spoken Response */}
+                  <button
+                    onClick={() => {
+                      if (lastSpokenAnswer) {
+                        speakWithSarvam(lastSpokenAnswer.text, lastSpokenAnswer.id, lastSpokenAnswer.lang);
+                      }
+                    }}
+                    disabled={!lastSpokenAnswer || isLoading || isSarvamRecording}
+                    className={`flex items-center gap-2 px-4 py-3 rounded-2xl text-xs font-bold border transition-all cursor-pointer active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
+                      theme === 'dark' ? 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:text-white hover:bg-zinc-700' : 'bg-zinc-100 border-zinc-200 text-zinc-700 hover:bg-zinc-200'
+                    }`}
+                    title="Replay last answer"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span className="hidden sm:inline">
+                      {supportLang === 'hi-IN' ? 'दोबारा सुनें' : supportLang === 'mr-IN' ? 'पुन्हा ऐका' : 'Replay'}
+                    </span>
+                  </button>
+
+                  {/* Main Central Mic / Stop Button */}
+                  <button
+                    id="voice-call-mic-btn"
+                    onClick={() => {
+                      if (sarvamSpeakingId) {
+                        sarvamCurrentAudioRef.current?.pause();
+                        sarvamCurrentAudioRef.current = null;
+                        setSarvamSpeakingId(null);
+                        handleSarvamMic();
+                      } else {
+                        handleSarvamMic();
+                      }
+                    }}
+                    disabled={isLoading}
+                    className={`w-18 h-18 rounded-full flex items-center justify-center transition-all duration-300 shadow-xl cursor-pointer active:scale-90 disabled:opacity-50 ${
+                      isSarvamRecording
+                        ? 'bg-red-600 hover:bg-red-500 text-white shadow-red-600/40 animate-pulse scale-105'
+                        : sarvamSpeakingId
+                        ? 'bg-gradient-to-tr from-indigo-600 to-violet-600 text-white shadow-indigo-600/40 hover:scale-105'
+                        : 'bg-gradient-to-tr from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-indigo-600/30 hover:scale-105'
+                    }`}
+                    title={isSarvamRecording ? 'Stop speaking and send' : 'Tap to speak'}
+                  >
+                    {isSarvamRecording ? (
+                      <MicOff className="w-7 h-7" />
+                    ) : sarvamSpeakingId ? (
+                      <Mic className="w-7 h-7 animate-pulse" />
+                    ) : (
+                      <Mic className="w-7 h-7" />
+                    )}
+                  </button>
+
+                  {/* End Call / Hang Up */}
+                  <button
+                    onClick={() => {
+                      if (sarvamSpeakingId) {
+                        sarvamCurrentAudioRef.current?.pause();
+                        sarvamCurrentAudioRef.current = null;
+                        setSarvamSpeakingId(null);
+                      }
+                      if (isSarvamRecording) {
+                        sarvamMediaRecorderRef.current?.stop();
+                        setIsSarvamRecording(false);
+                      }
+                      setSupportGatePassed(false);
+                      setSupportOrderId('');
+                      setSupportGateError('');
+                    }}
+                    className="flex items-center gap-2 px-4 py-3 rounded-2xl text-xs font-bold text-white bg-red-600 hover:bg-red-500 transition-all shadow-md shadow-red-600/20 cursor-pointer active:scale-95"
+                    title="End Call"
+                  >
+                    <PhoneOff className="w-4 h-4" />
+                    <span className="hidden sm:inline">
+                      {supportLang === 'hi-IN' ? 'कॉल समाप्त' : supportLang === 'mr-IN' ? 'कॉल समाप्त' : 'End Call'}
+                    </span>
+                  </button>
+                </footer>
+              </section>
+            )}
           </div>
         ) : activeView === 'shop' ? (
           // Storefront Products Catalog Grid View
