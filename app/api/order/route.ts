@@ -98,29 +98,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const chatText = chat.toLowerCase();
-    const wantsBuyOrder = /buy|order|purchase|checkout|place.*order/i.test(chatText);
-    const isConfirmWord = /^(yes|confirm|approve|proceed)$/i.test(chatText.trim());
-
-    if (chatText.trim() === 'cancel' || confirm_action === false) {
-      return NextResponse.json({
-        res: "The order placement was cancelled. How else can I assist you?",
-        status: "cancelled",
-        user: username || 'Guest'
-      });
-    }
-
-    if (wantsBuyOrder && !isConfirmWord && !confirm_action) {
-      const matches = findMatchingProducts(chatText);
-      const targetProduct = matches[0] || (productsData as any[]).find(p => p.category.toLowerCase().includes('television') || p.category.toLowerCase().includes('tv')) || productsData[0];
-      return NextResponse.json({
-        res: `⚠️ Human Confirmation Required: Would you like to confirm and place your order for **${targetProduct.name}** for ₹${Number(targetProduct.price).toLocaleString('en-IN')}?`,
-        status: "waiting_approval",
-        requires_confirmation: true,
-        product_name: targetProduct.name,
-        price: targetProduct.price
-      });
-    }
 
     const orderUrl = getHfOrderUrl();
 
@@ -223,16 +200,6 @@ export async function POST(request: Request) {
 
       if (!targetProduct) {
         targetProduct = productsData[0];
-      }
-
-      if (!confirm_action) {
-        return NextResponse.json({
-          res: `⚠️ Human Confirmation Required: Would you like to confirm and place your order for **${targetProduct.name}** for ₹${Number(targetProduct.price).toLocaleString('en-IN')}?`,
-          status: "waiting_approval",
-          requires_confirmation: true,
-          product_name: targetProduct.name,
-          price: targetProduct.price
-        });
       }
 
       // Save order to MongoDB
