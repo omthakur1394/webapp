@@ -154,7 +154,9 @@ export async function POST(request: Request) {
 
     // --- OFFLINE FALLBACK ---
     // If the HF space is offline, we parse the user's message locally
+    const chatText = chat.toLowerCase();
     const wantsRecommendation = /recommend|suggest|show|find|best|good|top|options|which|should/i.test(chatText);
+    const wantsBuyOrder = /buy|order|purchase|checkout|place.*order|add.*cart/i.test(chatText);
     const isRecommendationOnly = wantsRecommendation && !/(place.*order|buy.*now|order.*now|checkout|purchase.*now|add.*cart)/i.test(chatText);
 
     if (wantsRecommendation) {
