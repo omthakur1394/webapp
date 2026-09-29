@@ -29,7 +29,7 @@ export default function RootLayout({
       lang="en"
       className={`h-full antialiased ${roboto.className}`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="h-full flex flex-col">{children}</body>
     </html>
   );
 }

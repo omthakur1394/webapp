@@ -1716,7 +1716,7 @@ export default function Home() {
     };
 
     return (
-      <section className={`flex-1 flex flex-col h-full overflow-hidden relative transition-colors duration-300 ${theme === 'dark' ? 'bg-zinc-900' : 'bg-white'}`}>
+      <section className={`flex-1 flex flex-col h-full overflow-hidden relative min-h-0 transition-colors duration-300 ${theme === 'dark' ? 'bg-zinc-900' : 'bg-white'}`}>
         {/* Header */}
         <header className={`flex items-center justify-between px-6 py-4 border-b flex-shrink-0 transition-colors duration-300 ${theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-150'}`}>
           <div className="flex items-center gap-3">
@@ -1796,7 +1796,7 @@ export default function Home() {
         <div 
           ref={chatContainerRef}
           onScroll={handleScroll}
-          className={`flex-1 overflow-y-auto px-4 py-6 md:p-6 space-y-5 relative transition-colors duration-300 ${theme === 'dark' ? 'bg-zinc-950/40' : 'bg-zinc-55/30'}`}
+          className={`flex-1 overflow-y-auto px-4 py-6 md:p-6 space-y-5 relative min-h-0 transition-colors duration-300 ${theme === 'dark' ? 'bg-zinc-950/40' : 'bg-zinc-55/30'}`}
         >
           <div className="max-w-4xl mx-auto w-full space-y-5">
           {messages.map((message) => {
@@ -2219,10 +2219,12 @@ export default function Home() {
   }
 
   return (
-    <main className={`flex flex-col min-h-screen font-sans transition-colors duration-300 ${theme === 'dark' ? 'bg-zinc-950 text-zinc-100' : 'bg-zinc-50 text-zinc-900'}`}>
+    <main className={`flex flex-col font-sans transition-colors duration-300 ${
+      activeView === 'shop' ? 'min-h-screen' : 'h-screen max-h-screen overflow-hidden'
+    } ${theme === 'dark' ? 'bg-zinc-950 text-zinc-100' : 'bg-zinc-50 text-zinc-900'}`}>
       
       {/* Premium E-Commerce Header */}
-      <header className={`sticky top-0 z-30 border-b px-6 py-4 flex items-center justify-between transition-colors duration-300 ${theme === 'dark' ? 'bg-zinc-900/90 border-zinc-800 backdrop-blur-md' : 'bg-white/90 border-zinc-200 backdrop-blur-md'}`}>
+      <header className={`sticky top-0 z-30 border-b px-6 py-4 flex items-center justify-between flex-shrink-0 transition-colors duration-300 ${theme === 'dark' ? 'bg-zinc-900/90 border-zinc-800 backdrop-blur-md' : 'bg-white/90 border-zinc-200 backdrop-blur-md'}`}>
         <div className="flex items-center gap-3">
           <div onClick={() => { setActiveView('shop'); setIsChatOpen(false); }} className="cursor-pointer">
             <BrandIconLogo className="w-9 h-9 hover:scale-105 transition-transform" />
@@ -2484,12 +2486,12 @@ export default function Home() {
       )}
 
       {/* Main Container */}
-      <div className="flex-1 flex flex-row overflow-hidden relative">
+      <div className="flex-1 flex flex-row overflow-hidden relative min-h-0">
         
         {/* Render active view */}
         {activeView === 'chat' ? (
           // Full screen Chat Dashboard view
-          <div className="w-full h-full flex flex-row overflow-hidden">
+          <div className="w-full h-full flex flex-row overflow-hidden min-h-0">
             {/* Sidebar backdrop */}
             {isSidebarOpen && (
               <div 
