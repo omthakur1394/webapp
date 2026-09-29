@@ -47,7 +47,7 @@ function findMatchingProducts(query: string): any[] {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { chat, thread_id, user_id, product_name, price, username, shipping_address, hub_region } = body;
+    const { chat, thread_id, user_id, product_name, price, username, confirm_action, shipping_address, hub_region } = body;
 
     // Direct UI Checkout Modal handling
     if (user_id && product_name && price) {
@@ -98,6 +98,29 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+    const chatText = chat.toLowerCase();
+    const wantsBuyOrder = /buy|order|purchase|checkout|place.*order/i.test(chatText);
+    const isConfirmWord = /^(yes|confirm|approve|proceed)$/i.test(chatText.trim());
+
+    if (chatText.trim() === 'cancel' || confirm_action === false) {
+      return NextResponse.json({
+        res: "The order placement was cancelled. How else can I assist you?",
+        status: "cancelled",
+        user: username || 'Guest'
+      });
+    }
+
+    if (wantsBuyOrder && !isConfirmWord && !confirm_action) {
+      const matches = findMatchingProducts(chatText);
+      const targetProduct = matches[0] || (productsData as any[]).find(p => p.category.toLowerCase().includes('television') || p.category.toLowerCase().includes('tv')) || productsData[0];
+      return NextResponse.json({
+        res: `⚠️ Human Confirmation Required: Would you like to confirm and place your order for **${targetProduct.name}** for ₹${Number(targetProduct.price).toLocaleString('en-IN')}?`,
+        status: "waiting_approval",
+        requires_confirmation: true,
+        product_name: targetProduct.name,
+        price: targetProduct.price
+      });
+    }
 
     const orderUrl = getHfOrderUrl();
 
@@ -106,7 +129,18 @@ export async function POST(request: Request) {
 
     // Try forwarding to the Hugging Face FastAPI /order endpoint
     try {
-      const response = await hfPost(orderUrl, { chat, thread_id });
+      const userAuthHeader = request.headers.get('authorization');
+      const response = await hfPost(
+        orderUrl, 
+        { 
+          chat, 
+          thread_id,
+          confirm_action: typeof confirm_action === 'boolean' ? confirm_action : false,
+          user_id: user_id || "",
+          username: username || ""
+        },
+        userAuthHeader
+      );
 
       if (response.ok) {
         try {
@@ -143,9 +177,7 @@ export async function POST(request: Request) {
 
     // --- OFFLINE FALLBACK ---
     // If the HF space is offline, we parse the user's message locally
-    const chatText = chat.toLowerCase();
     const wantsRecommendation = /recommend|suggest|show|find|best|good|top|options|which|should/i.test(chatText);
-    const wantsBuyOrder = /buy|order|purchase|checkout|place.*order|add.*cart/i.test(chatText);
     const isRecommendationOnly = wantsRecommendation && !/(place.*order|buy.*now|order.*now|checkout|purchase.*now|add.*cart)/i.test(chatText);
 
     if (wantsRecommendation) {
@@ -191,6 +223,16 @@ export async function POST(request: Request) {
 
       if (!targetProduct) {
         targetProduct = productsData[0];
+      }
+
+      if (!confirm_action) {
+        return NextResponse.json({
+          res: `⚠️ Human Confirmation Required: Would you like to confirm and place your order for **${targetProduct.name}** for ₹${Number(targetProduct.price).toLocaleString('en-IN')}?`,
+          status: "waiting_approval",
+          requires_confirmation: true,
+          product_name: targetProduct.name,
+          price: targetProduct.price
+        });
       }
 
       // Save order to MongoDB

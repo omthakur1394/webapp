@@ -46,6 +46,9 @@ interface Message {
   content: string;
   timestamp: Date;
   isError?: boolean;
+  status?: string;
+  requires_confirmation?: boolean;
+  actionTaken?: 'approved' | 'rejected' | 'edited';
 }
 
 interface ChatSession {
@@ -1119,7 +1122,36 @@ export default function Home() {
   // Regular expression to strip citations like [0], [1], [12]
   const cleanCitation = (text: string): string => {
     return text.replace(/\[\d+\]/g, '').replace(/\s+/g, ' ').trim();
-  };  const handleSendMessage = async (text: string, isDrawerMode = false) => {
+  };
+
+  const handleActionClick = (messageId: string, action: 'approve' | 'reject' | 'edit', isDrawerMode = false) => {
+    const updateSessionMessages = (prevSessions: ChatSession[]) =>
+      prevSessions.map(s => ({
+        ...s,
+        messages: s.messages.map(m =>
+          m.id === messageId
+            ? { ...m, actionTaken: action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'edited' }
+            : m
+        )
+      }));
+
+    if (isDrawerMode) {
+      setSalesSessions(updateSessionMessages);
+    } else {
+      setSupportSessions(updateSessionMessages);
+    }
+
+    if (action === 'approve') {
+      handleSendMessage('confirm', isDrawerMode, true);
+    } else if (action === 'reject') {
+      handleSendMessage('cancel', isDrawerMode, false);
+    } else if (action === 'edit') {
+      setInputValue('I would like to update this order: ');
+      inputRef.current?.focus();
+    }
+  };
+
+  const handleSendMessage = async (text: string, isDrawerMode = false, confirmAction?: boolean) => {
 
     if (!text.trim() || isLoading) return;
 
@@ -1155,17 +1187,22 @@ export default function Home() {
       setIsLoading(true);
 
       try {
+        const payload: any = {
+          chat: text,
+          thread_id: currentSessionId,
+          username: currentUser?.username || 'Guest',
+          shipping_address: currentUser ? '123 E-Commerce Way, Tech City' : ''
+        };
+        if (typeof confirmAction === 'boolean') {
+          payload.confirm_action = confirmAction;
+        }
+
         const res = await fetch('/api/order', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            chat: text,
-            thread_id: currentSessionId,
-            username: currentUser?.username || 'Guest',
-            shipping_address: currentUser ? '123 E-Commerce Way, Tech City' : ''
-          }),
+          body: JSON.stringify(payload),
         });
 
         if (!res.ok) {
@@ -1189,7 +1226,7 @@ export default function Home() {
           || "I'm sorry, I couldn't process your request. Please try again.";
         // Auto-popup Order Confirmed Modal & Append Order ID if Sales Assistant execution placed an order
         const ordMatch = botMessageContent.match(/ORD-[A-Z0-9]{8}/i);
-        const isOrderPlacedMsg = /successfully placed|order.*placed|has been.*placed/i.test(botMessageContent);
+        const isOrderPlacedMsg = !botMessageContent.includes('Human Confirmation') && !data?.requires_confirmation && /successfully placed|has been.*placed/i.test(botMessageContent);
 
         let newOrderId = ordMatch ? ordMatch[0].toUpperCase() : '';
         if (isOrderPlacedMsg) {
@@ -1222,7 +1259,9 @@ export default function Home() {
           id: crypto.randomUUID(),
           role: 'assistant',
           content: botMessageContent,
-          timestamp: new Date()
+          timestamp: new Date(),
+          status: data.status,
+          requires_confirmation: Boolean(data.requires_confirmation || data.status === 'waiting_approval' || botMessageContent.includes('Human Confirmation Required')),
         };
 
         setSalesSessions(prev => prev.map(s => {
@@ -1897,6 +1936,57 @@ export default function Home() {
 
                         {orderIdMatch && (
                           <ChatOrderTracker orderId={orderIdMatch} theme={theme} />
+                        )}
+
+                        {/* Interactive Human-In-The-Loop Confirmation Buttons */}
+                        {isBot && (message.requires_confirmation || message.content.includes('Human Confirmation Required') || message.content.includes('⚠️ Human Confirmation')) && (
+                          <div className="mt-3 pt-3 border-t border-amber-500/30 flex flex-wrap items-center gap-2 select-none">
+                            <button
+                              type="button"
+                              onClick={() => handleActionClick(message.id, 'approve', isDrawerMode)}
+                              disabled={isLoading || !!message.actionTaken}
+                              className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer ${
+                                message.actionTaken === 'approved'
+                                  ? 'bg-emerald-600 text-white cursor-default'
+                                  : message.actionTaken
+                                  ? 'opacity-40 cursor-not-allowed bg-zinc-700 text-zinc-400'
+                                  : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
+                              }`}
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>{message.actionTaken === 'approved' ? 'Approved ✓' : 'Approve'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleActionClick(message.id, 'reject', isDrawerMode)}
+                              disabled={isLoading || !!message.actionTaken}
+                              className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer ${
+                                message.actionTaken === 'rejected'
+                                  ? 'bg-red-600 text-white cursor-default'
+                                  : message.actionTaken
+                                  ? 'opacity-40 cursor-not-allowed bg-zinc-700 text-zinc-400'
+                                  : (theme === 'dark' ? 'bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-800/60' : 'bg-red-50 hover:bg-red-100 text-red-700 border border-red-200')
+                              }`}
+                            >
+                              <X className="w-3.5 h-3.5" />
+                              <span>{message.actionTaken === 'rejected' ? 'Rejected ✗' : 'Reject'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleActionClick(message.id, 'edit', isDrawerMode)}
+                              disabled={isLoading || !!message.actionTaken}
+                              className={`px-3 py-1.5 rounded-xl font-semibold text-xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer ${
+                                message.actionTaken
+                                  ? 'opacity-40 cursor-not-allowed bg-zinc-700 text-zinc-400'
+                                  : (theme === 'dark' ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700' : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-800 border border-zinc-300')
+                              }`}
+                            >
+                              <Edit2 className="w-3.5 h-3.5 text-amber-500" />
+                              <span>Edit</span>
+                            </button>
+                          </div>
                         )}
                       </div>
                     ) : (
