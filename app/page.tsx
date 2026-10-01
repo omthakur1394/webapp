@@ -1984,6 +1984,34 @@ export default function Home() {
         {/* Input Zone */}
         <footer className={`border-t px-4 py-4 md:px-6 flex-shrink-0 transition-colors duration-300 ${theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'}`}>
           <div className="max-w-4xl mx-auto w-full">
+            {/* Top 5 Recent Orders Quick Selector in Support Chat */}
+            {!isDrawerMode && currentUser && userOrders.length > 0 && (
+              <div className="mb-2.5 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                <span className={`text-[10px] font-bold uppercase tracking-wider flex-shrink-0 flex items-center gap-1 ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                  📦 Recent:
+                </span>
+                {userOrders.slice(0, 5).map((ord: any) => (
+                  <button
+                    key={ord.order_id || ord._id}
+                    type="button"
+                    onClick={() => {
+                      setInputValue(`Track my order ${ord.order_id}`);
+                      inputRef.current?.focus();
+                    }}
+                    className={`flex-shrink-0 text-[11px] font-medium px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 ${
+                      theme === 'dark'
+                        ? 'bg-zinc-800/80 border-zinc-700/80 hover:bg-zinc-700 hover:border-zinc-600 text-zinc-300'
+                        : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 hover:border-zinc-300 text-zinc-700'
+                    }`}
+                    title={`Click to ask about ${ord.product_name}`}
+                  >
+                    <span className="font-mono font-bold text-indigo-500">{ord.order_id}</span>
+                    <span className="max-w-[120px] truncate">{ord.product_name}</span>
+                    <span className="text-[10px] font-bold text-emerald-500">₹{ord.price?.toLocaleString()}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             <form onSubmit={handleFormSubmit} className="flex gap-2">
               <input
                 ref={inputRef}
@@ -2805,9 +2833,77 @@ export default function Home() {
                       speakWithSarvam(welcomeText, botMsg.id, supportLang);
                     }
                   }} className="flex flex-col gap-4">
+                    {/* Top 5 Recent Orders Quick Selector */}
+                    {currentUser && userOrders.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className={`text-[11px] font-bold flex items-center gap-1.5 uppercase tracking-wider ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
+                            📦 {supportLang === 'hi-IN' ? 'हाल के ऑर्डर चुनें' : supportLang === 'mr-IN' ? 'अलीकडील ऑर्डर निवडा' : 'Select a Recent Order'}
+                          </label>
+                          <span className="text-[10px] text-indigo-500 font-semibold">Top {Math.min(5, userOrders.length)}</span>
+                        </div>
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                          {userOrders.slice(0, 5).map((ord: any) => {
+                            const isSelected = supportOrderId.trim().toUpperCase() === (ord.order_id || '').toUpperCase();
+                            return (
+                              <button
+                                key={ord.order_id || ord._id}
+                                type="button"
+                                onClick={() => {
+                                  setSupportOrderId(ord.order_id);
+                                  setSupportGateError('');
+                                }}
+                                className={`w-full text-left p-3 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                                  isSelected
+                                    ? 'border-indigo-500 bg-indigo-500/10 shadow-sm ring-1 ring-indigo-500/50'
+                                    : (theme === 'dark' 
+                                        ? 'border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 hover:bg-zinc-800/40 text-zinc-300' 
+                                        : 'border-zinc-200 bg-zinc-50 hover:border-zinc-300 hover:bg-white text-zinc-800')
+                                }`}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono text-xs font-bold text-indigo-500">{ord.order_id}</span>
+                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                                      ord.status === 'Delivered' 
+                                        ? 'bg-emerald-500/10 text-emerald-500' 
+                                        : ord.status === 'Paused' || ord.status === 'On Hold' 
+                                        ? 'bg-amber-500/10 text-amber-500' 
+                                        : 'bg-indigo-500/10 text-indigo-500'
+                                    }`}>
+                                      {ord.status}
+                                    </span>
+                                  </div>
+                                  <p className={`text-xs mt-1 font-medium truncate ${theme === 'dark' ? 'text-zinc-200' : 'text-zinc-800'}`}>
+                                    {ord.product_name}
+                                  </p>
+                                </div>
+                                <div className="text-right flex-shrink-0 flex items-center gap-2">
+                                  <span className="text-xs font-bold text-emerald-500">₹{ord.price?.toLocaleString()}</span>
+                                  {isSelected && (
+                                    <div className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center">
+                                      <Check className="w-3 h-3" />
+                                    </div>
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     <div>
                       <label className={`text-[11px] font-bold mb-1.5 flex items-center gap-1.5 uppercase tracking-wider ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                        📦 {supportLang === 'hi-IN' ? 'ऑर्डर ID दर्ज करें' : supportLang === 'mr-IN' ? 'ऑर्डर ID टाका' : 'Enter Order ID'} <span className="text-red-500">*</span>
+                        {currentUser && userOrders.length > 0 ? (
+                          <>
+                            ✏️ {supportLang === 'hi-IN' ? 'या दूसरा ऑर्डर ID दर्ज करें' : supportLang === 'mr-IN' ? 'किंवा दुसरा ऑर्डर ID टाका' : 'Or Enter Another Order ID'}
+                          </>
+                        ) : (
+                          <>
+                            📦 {supportLang === 'hi-IN' ? 'ऑर्डर ID दर्ज करें' : supportLang === 'mr-IN' ? 'ऑर्डर ID टाका' : 'Enter Order ID'} <span className="text-red-500">*</span>
+                          </>
+                        )}
                       </label>
                       <input
                         id="voice-support-order-id"
