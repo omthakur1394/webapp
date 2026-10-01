@@ -9,10 +9,11 @@ import Link from 'next/link';
 
 export default function AdminPage() {
   const [mounted, setMounted] = useState(false);
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [admin, setAdmin] = useState<{ region: string; token: string } | null>(null);
+  const [admin, setAdmin] = useState<{ region: string; token: string; username?: string; name?: string; role?: string } | null>(null);
 
   const [orders, setOrders] = useState<any[]>([]);
   const [notes, setNotes] = useState<any[]>([]);
@@ -81,7 +82,7 @@ export default function AdminPage() {
       const res = await fetch('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
+        body: JSON.stringify({ username, password })
       });
       const data = await res.json();
       if (!res.ok) {
@@ -90,8 +91,9 @@ export default function AdminPage() {
 
       setAdmin(data);
       localStorage.setItem('shopease_admin', JSON.stringify(data));
+      setUsername('');
       setPassword('');
-      showToastMessage(`Logged in successfully as ${data.region} Admin!`);
+      showToastMessage(`Logged in successfully as ${data.name || data.region} Admin!`);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -102,6 +104,8 @@ export default function AdminPage() {
   const handleLogout = () => {
     setAdmin(null);
     localStorage.removeItem('shopease_admin');
+    setUsername('');
+    setPassword('');
     setOrders([]);
     setNotes([]);
     showToastMessage('Logged out successfully.');
@@ -247,7 +251,7 @@ export default function AdminPage() {
         {admin && (
           <div className="flex items-center gap-3">
             <span className="text-[11px] font-bold px-2.5 py-1 bg-indigo-600/10 border border-indigo-500/20 text-indigo-400 rounded-full flex items-center gap-1">
-              <MapPin className="w-3 h-3" /> {admin.region} Hub Admin
+              <MapPin className="w-3 h-3" /> {admin.name || admin.username || admin.region} ({admin.region} Hub)
             </span>
             <button
               onClick={handleLogout}
@@ -270,10 +274,21 @@ export default function AdminPage() {
                   <Lock className="w-5 h-5 text-indigo-400" />
                 </div>
                 <h2 className="text-base font-bold text-white">Hub Administrator Login</h2>
-                <p className="text-[10px] text-zinc-500 mt-1">Enter password credential (e.g. nagpur123, mumbai123, admin123)</p>
+                <p className="text-[10px] text-zinc-500 mt-1">MongoDB-authenticated staff control portal</p>
               </div>
 
-              <form onSubmit={handleLogin} className="space-y-4">
+              <form onSubmit={handleLogin} className="space-y-3.5">
+                <div>
+                  <label className="block text-[10px] text-zinc-400 font-bold mb-1.5 uppercase tracking-wider">Username</label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="e.g. superadmin, mumbai_admin, nagpur_admin"
+                    className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-2.5 text-xs outline-none focus:border-indigo-500 transition-all text-center placeholder:text-zinc-600"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-[10px] text-zinc-400 font-bold mb-1.5 uppercase tracking-wider">Access Password</label>
                   <input
@@ -282,7 +297,7 @@ export default function AdminPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter admin password..."
-                    className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4.5 py-3 text-xs outline-none focus:border-indigo-500 transition-all text-center tracking-widest placeholder:tracking-normal"
+                    className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4.5 py-2.5 text-xs outline-none focus:border-indigo-500 transition-all text-center tracking-widest placeholder:tracking-normal placeholder:text-zinc-600"
                   />
                 </div>
 
