@@ -18,7 +18,8 @@ export async function GET(request: Request) {
     const db = client.db('shopease_db');
     const notesCollection = db.collection('hub_notes');
 
-    const list = await notesCollection.find({ region }).sort({ created_at: -1 }).toArray();
+    const query = region === 'Super' ? {} : { region };
+    const list = await notesCollection.find(query).sort({ created_at: -1 }).toArray();
     return NextResponse.json(list);
   } catch (error: any) {
     console.error('Error fetching hub notes:', error);

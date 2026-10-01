@@ -9,13 +9,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Password is required' }, { status: 400 });
     }
 
-    if (password === 'admin@1') {
+    const pwd = password.trim().toLowerCase();
+
+    if (pwd === 'admin' || pwd === 'admin123' || pwd === 'admin@123' || pwd === 'super' || pwd === 'superadmin') {
+      return NextResponse.json({
+        success: true,
+        region: 'Super',
+        token: 'admin-super-session-token'
+      });
+    } else if (pwd === 'admin@1' || pwd === 'mumbai123' || pwd === 'mumbai') {
       return NextResponse.json({
         success: true,
         region: 'Mumbai',
         token: 'admin-mumbai-session-token'
       });
-    } else if (password === 'admain@2' || password === 'admin@2') {
+    } else if (pwd === 'admain@2' || pwd === 'admin@2' || pwd === 'nagpur123' || pwd === 'nagpur') {
       return NextResponse.json({
         success: true,
         region: 'Nagpur',
