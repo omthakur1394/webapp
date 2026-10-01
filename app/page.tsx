@@ -1710,6 +1710,7 @@ export default function Home() {
     const currentActiveId = isDrawerMode ? activeSalesSessionId : activeSupportSessionId;
     const currentActiveSession = currentSessions.find(s => s.id === currentActiveId);
     const messages = currentActiveSession ? currentActiveSession.messages : [];
+    const hasOrderInSession = messages.some(m => /ORD-[A-Z0-9]{8}/i.test(m.content));
     const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
 
     const handleFormSubmit = (e: React.FormEvent) => {
@@ -1837,7 +1838,7 @@ export default function Home() {
                 {/* Message Bubble Column */}
                 <div className="flex flex-col gap-1 group max-w-full">
                   <div
-                    className={`relative px-4 py-3 rounded-2xl text-xs leading-relaxed shadow-sm ${
+                    className={`relative px-4 py-3 rounded-2xl text-[13.5px] sm:text-sm leading-relaxed shadow-sm ${
                       isBot
                         ? message.content.includes('⚠️')
                           ? (theme === 'dark' ? 'bg-amber-950/25 border border-amber-500/40 text-amber-200 rounded-tl-none' : 'bg-amber-50 border border-amber-300 text-amber-900 rounded-tl-none')
@@ -1851,11 +1852,11 @@ export default function Home() {
                           components={{
                             ul: ({ node, ...props }) => <ul className="space-y-1.5 my-2.5 list-disc pl-5" {...props} />,
                             ol: ({ node, ...props }) => <ol className="space-y-1.5 my-2.5 list-decimal pl-5" {...props} />,
-                            li: ({ node, ...props }) => <li className={`pl-0.5 ${theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'}`} {...props} />,
-                            p: ({ node, ...props }) => <p className={`mb-2 last:mb-0 leading-relaxed ${theme === 'dark' ? 'text-zinc-200' : 'text-zinc-800'}`} {...props} />,
+                            li: ({ node, ...props }) => <li className={`pl-0.5 leading-relaxed text-[13.5px] sm:text-sm ${theme === 'dark' ? 'text-zinc-300' : 'text-zinc-700'}`} {...props} />,
+                            p: ({ node, ...props }) => <p className={`mb-2.5 last:mb-0 leading-relaxed text-[13.5px] sm:text-sm ${theme === 'dark' ? 'text-zinc-200' : 'text-zinc-800'}`} {...props} />,
                             strong: ({ node, ...props }) => <strong className={`font-semibold ${theme === 'dark' ? 'text-white' : 'text-zinc-950'}`} {...props} />,
                             code: ({ node, ...props }) => (
-                              <code className={`px-1.5 py-0.5 rounded font-mono text-[11px] border ${theme === 'dark' ? 'bg-zinc-900 border-zinc-800 text-indigo-400' : 'bg-zinc-105 border-zinc-205 text-indigo-700'}`} {...props} />
+                              <code className={`px-1.5 py-0.5 rounded font-mono text-xs border ${theme === 'dark' ? 'bg-zinc-900 border-zinc-800 text-indigo-400' : 'bg-zinc-105 border-zinc-205 text-indigo-700'}`} {...props} />
                             ),
                             a: ({ node, ...props }) => (
                               <a
@@ -1902,7 +1903,7 @@ export default function Home() {
                         )}
                       </div>
                     ) : (
-                      <p className="whitespace-pre-wrap">{message.content}</p>
+                      <p className="whitespace-pre-wrap text-[13.5px] sm:text-sm leading-relaxed">{message.content}</p>
                     )}
 
                     {/* Copy Button */}
@@ -1984,18 +1985,18 @@ export default function Home() {
         {/* Input Zone */}
         <footer className={`border-t px-4 py-4 md:px-6 flex-shrink-0 transition-colors duration-300 ${theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'}`}>
           <div className="max-w-4xl mx-auto w-full">
-            {/* Top 5 Recent Orders Quick Selector in Support Chat */}
-            {!isDrawerMode && currentUser && userOrders.length > 0 && (
-              <div className="mb-2.5 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+            {/* Top 5 Recent Orders Quick Selector in Support Chat (disappears once an order is selected or passed) */}
+            {!isDrawerMode && currentUser && userOrders.length > 0 && !hasOrderInSession && !/ORD-[A-Z0-9]{8}/i.test(inputValue) && (
+              <div className="mb-2.5 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none transition-all">
                 <span className={`text-[10px] font-bold uppercase tracking-wider flex-shrink-0 flex items-center gap-1 ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                  📦 Recent:
+                  📦 Orders:
                 </span>
                 {userOrders.slice(0, 5).map((ord: any) => (
                   <button
                     key={ord.order_id || ord._id}
                     type="button"
                     onClick={() => {
-                      setInputValue(`Track my order ${ord.order_id}`);
+                      setInputValue(`${ord.order_id} `);
                       inputRef.current?.focus();
                     }}
                     className={`flex-shrink-0 text-[11px] font-medium px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 ${
@@ -2003,7 +2004,7 @@ export default function Home() {
                         ? 'bg-zinc-800/80 border-zinc-700/80 hover:bg-zinc-700 hover:border-zinc-600 text-zinc-300'
                         : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 hover:border-zinc-300 text-zinc-700'
                     }`}
-                    title={`Click to ask about ${ord.product_name}`}
+                    title={`Click to insert ${ord.order_id}`}
                   >
                     <span className="font-mono font-bold text-indigo-500">{ord.order_id}</span>
                     <span className="max-w-[120px] truncate">{ord.product_name}</span>
@@ -2022,7 +2023,7 @@ export default function Home() {
                 maxLength={1000}
                 placeholder={isLoading ? "Please wait..." : isDrawerMode ? "Ask your Sales Assistant anything..." : "Ask ShopEase support anything..."}
                 disabled={isLoading}
-                className={`flex-1 focus:ring-1 text-xs transition-all focus:outline-none disabled:opacity-60 rounded-xl px-4 py-3 ${theme === 'dark' ? 'bg-zinc-950 border-zinc-800 focus:border-indigo-600 focus:ring-indigo-600 text-white placeholder-zinc-550' : 'bg-zinc-50 border-zinc-200 focus:border-indigo-600 focus:ring-indigo-600 text-zinc-900 placeholder-zinc-400'}`}
+                className={`flex-1 focus:ring-1 text-sm transition-all focus:outline-none disabled:opacity-60 rounded-xl px-4 py-3 ${theme === 'dark' ? 'bg-zinc-950 border-zinc-800 focus:border-indigo-600 focus:ring-indigo-600 text-white placeholder-zinc-550' : 'bg-zinc-50 border-zinc-200 focus:border-indigo-600 focus:ring-indigo-600 text-zinc-900 placeholder-zinc-400'}`}
               />
 
               <button
