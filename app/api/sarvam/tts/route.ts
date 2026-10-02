@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { text, language_code } = body;
+    const { text, language_code, speaker: customSpeaker } = body;
 
     if (!text || !text.trim()) {
       return NextResponse.json({ error: 'text is required.' }, { status: 400 });
@@ -82,7 +82,8 @@ export async function POST(req: NextRequest) {
       batches.push(chunks.slice(i, i + 3));
     }
 
-    const speaker = language_code === 'mr-IN' ? 'rupali' : language_code === 'hi-IN' ? 'ritu' : 'simran';
+    // Default to 'ishita' voice on Sarvam AI
+    const speaker = customSpeaker || 'ishita';
     const audioResults: string[] = [];
 
     for (const batch of batches) {

@@ -930,7 +930,7 @@ export default function Home() {
       const res = await fetch('/api/sarvam/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: cleanText, language_code: lang }),
+        body: JSON.stringify({ text: cleanText, language_code: lang, speaker: 'ishita' }),
       });
       const data = await res.json();
       if (!res.ok || !data.audio) throw new Error(data.error || 'TTS failed');
@@ -3263,7 +3263,7 @@ export default function Home() {
 
                   <div className={`mt-6 pt-5 border-t flex items-center justify-between text-[11px] ${theme === 'dark' ? 'border-zinc-800 text-zinc-500' : 'border-zinc-100 text-zinc-400'}`}>
                     <span className="flex items-center gap-1 font-medium"><ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> End-to-End Encrypted</span>
-                    <span>Powered by Sarvam AI</span>
+                    <span className="font-semibold text-indigo-400">Powered by Sarvam AI • Ishita Voice</span>
                   </div>
                 </div>
               </section>
@@ -3290,6 +3290,9 @@ export default function Home() {
                         </h2>
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                           {String(Math.floor(callDuration / 60)).padStart(2, '0')}:{String(callDuration % 60).padStart(2, '0')}
+                        </span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-500/15 text-violet-400 border border-violet-500/30">
+                          Ishita Voice
                         </span>
                       </div>
                       <p className={`text-[11px] mt-1 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
