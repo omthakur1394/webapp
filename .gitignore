@@ -73,3 +73,5 @@ desktop.ini
 # Local test & debug logs
 *.log
 logs/
+testsprite_tests/tmp/
+testsprite_tests/tmp/config.json

@@ -239,6 +239,14 @@ export default function Home() {
   const sarvamSpeechRecRef = useRef<any>(null);
   const sarvamRecStartTimeRef = useRef<number>(0);
 
+  // Voice Call Silence Detection (VAD) & Hands-Free Phone Loop Refs
+  const sarvamSilenceTimerRef = useRef<any>(null);
+  const sarvamVadIntervalRef = useRef<any>(null);
+  const sarvamAudioContextRef = useRef<AudioContext | null>(null);
+  const sarvamStreamRef = useRef<MediaStream | null>(null);
+  const sarvamSpeechDetectedRef = useRef<boolean>(false);
+  const autoListenTimeoutRef = useRef<any>(null);
+
   // Gate voice typing states
   const [isGateRecording, setIsGateRecording] = useState(false);
   const gateMediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -267,7 +275,74 @@ export default function Home() {
   // Storefront view state: 'shop', 'chat', 'voice-support', or 'grievance'
   const [activeView, setActiveView] = useState<'shop' | 'chat' | 'voice-support' | 'grievance'>('shop');
 
-  // Voice Call Duration Timer
+  // Synchronized refs to avoid stale closures in media recorder / speech event handlers
+  const activeViewRef = useRef(activeView);
+  const supportGatePassedRef = useRef(supportGatePassed);
+  const sarvamSpeakingIdRef = useRef(sarvamSpeakingId);
+  const isSarvamRecordingRef = useRef(isSarvamRecording);
+  const isLoadingRef = useRef(isLoading);
+  const supportLangRef = useRef(supportLang);
+  const userMutedMicRef = useRef<boolean>(false);
+
+  useEffect(() => { activeViewRef.current = activeView; }, [activeView]);
+  useEffect(() => { supportGatePassedRef.current = supportGatePassed; }, [supportGatePassed]);
+  useEffect(() => { sarvamSpeakingIdRef.current = sarvamSpeakingId; }, [sarvamSpeakingId]);
+  useEffect(() => { isSarvamRecordingRef.current = isSarvamRecording; }, [isSarvamRecording]);
+  useEffect(() => { isLoadingRef.current = isLoading; }, [isLoading]);
+  useEffect(() => { supportLangRef.current = supportLang; }, [supportLang]);
+
+  // Clean terminate function for Voice Support phone call (strictly shuts off mic hardware)
+  const endVoiceCall = () => {
+    userMutedMicRef.current = true;
+    if (autoListenTimeoutRef.current) {
+      clearTimeout(autoListenTimeoutRef.current);
+      autoListenTimeoutRef.current = null;
+    }
+    if (sarvamSilenceTimerRef.current) {
+      clearTimeout(sarvamSilenceTimerRef.current);
+      sarvamSilenceTimerRef.current = null;
+    }
+    if (sarvamVadIntervalRef.current) {
+      clearInterval(sarvamVadIntervalRef.current);
+      sarvamVadIntervalRef.current = null;
+    }
+    if (sarvamAudioContextRef.current) {
+      try { sarvamAudioContextRef.current.close(); } catch {}
+      sarvamAudioContextRef.current = null;
+    }
+    if (sarvamStreamRef.current) {
+      sarvamStreamRef.current.getTracks().forEach(t => {
+        try { t.stop(); t.enabled = false; } catch {}
+      });
+      sarvamStreamRef.current = null;
+    }
+    if (sarvamSpeechRecRef.current) {
+      try {
+        sarvamSpeechRecRef.current.abort();
+        sarvamSpeechRecRef.current.stop();
+      } catch {}
+      sarvamSpeechRecRef.current = null;
+    }
+    if (sarvamMediaRecorderRef.current) {
+      try {
+        if (sarvamMediaRecorderRef.current.state === 'recording') {
+          sarvamMediaRecorderRef.current.stop();
+        }
+      } catch {}
+      sarvamMediaRecorderRef.current = null;
+    }
+    if (sarvamCurrentAudioRef.current) {
+      sarvamCurrentAudioRef.current.pause();
+      sarvamCurrentAudioRef.current = null;
+    }
+    setSarvamSpeakingId(null);
+    setIsSarvamRecording(false);
+    setSupportGatePassed(false);
+    setSupportOrderId('');
+    setSupportGateError('');
+  };
+
+  // Voice Call Duration Timer and cleanup
   useEffect(() => {
     if (activeView === 'voice-support' && supportGatePassed) {
       callTimerRef.current = setInterval(() => {
@@ -276,9 +351,33 @@ export default function Home() {
     } else {
       if (callTimerRef.current) clearInterval(callTimerRef.current);
       setCallDuration(0);
+      if (activeView !== 'voice-support' || !supportGatePassed) {
+        if (autoListenTimeoutRef.current) clearTimeout(autoListenTimeoutRef.current);
+        if (sarvamSilenceTimerRef.current) clearTimeout(sarvamSilenceTimerRef.current);
+        if (sarvamVadIntervalRef.current) clearInterval(sarvamVadIntervalRef.current);
+        if (sarvamAudioContextRef.current) {
+          try { sarvamAudioContextRef.current.close(); } catch {}
+          sarvamAudioContextRef.current = null;
+        }
+        if (sarvamStreamRef.current) {
+          sarvamStreamRef.current.getTracks().forEach(t => t.stop());
+          sarvamStreamRef.current = null;
+        }
+      }
     }
     return () => {
       if (callTimerRef.current) clearInterval(callTimerRef.current);
+      if (autoListenTimeoutRef.current) clearTimeout(autoListenTimeoutRef.current);
+      if (sarvamSilenceTimerRef.current) clearTimeout(sarvamSilenceTimerRef.current);
+      if (sarvamVadIntervalRef.current) clearInterval(sarvamVadIntervalRef.current);
+      if (sarvamAudioContextRef.current) {
+        try { sarvamAudioContextRef.current.close(); } catch {}
+        sarvamAudioContextRef.current = null;
+      }
+      if (sarvamStreamRef.current) {
+        sarvamStreamRef.current.getTracks().forEach(t => t.stop());
+        sarvamStreamRef.current = null;
+      }
     };
   }, [activeView, supportGatePassed]);
   
@@ -845,11 +944,43 @@ export default function Home() {
       setSarvamSpeakingId(messageId);
       setLastSpokenAnswer({ text: cleanText, id: messageId, lang: (lang as SupportLang) });
       audio.play();
-      audio.onended = () => { setSarvamSpeakingId(null); sarvamCurrentAudioRef.current = null; URL.revokeObjectURL(audioUrl); };
-      audio.onerror = () => { setSarvamSpeakingId(null); sarvamCurrentAudioRef.current = null; };
+      audio.onended = () => { 
+        setSarvamSpeakingId(null); 
+        sarvamCurrentAudioRef.current = null; 
+        URL.revokeObjectURL(audioUrl); 
+        // Hands-Free Phone Call: automatically resume listening after assistant finishes speaking
+        if (!userMutedMicRef.current && activeViewRef.current === 'voice-support' && supportGatePassedRef.current && !isLoadingRef.current) {
+          if (autoListenTimeoutRef.current) clearTimeout(autoListenTimeoutRef.current);
+          autoListenTimeoutRef.current = setTimeout(() => {
+            if (!userMutedMicRef.current && activeViewRef.current === 'voice-support' && supportGatePassedRef.current && !isSarvamRecordingRef.current && !sarvamSpeakingIdRef.current) {
+              handleSarvamMic();
+            }
+          }, 450);
+        }
+      };
+      audio.onerror = () => { 
+        setSarvamSpeakingId(null); 
+        sarvamCurrentAudioRef.current = null; 
+        if (!userMutedMicRef.current && activeViewRef.current === 'voice-support' && supportGatePassedRef.current && !isLoadingRef.current) {
+          if (autoListenTimeoutRef.current) clearTimeout(autoListenTimeoutRef.current);
+          autoListenTimeoutRef.current = setTimeout(() => {
+            if (!userMutedMicRef.current && activeViewRef.current === 'voice-support' && supportGatePassedRef.current && !isSarvamRecordingRef.current && !sarvamSpeakingIdRef.current) {
+              handleSarvamMic();
+            }
+          }, 600);
+        }
+      };
     } catch (err) {
       console.error('Sarvam TTS error:', err);
       setSarvamSpeakingId(null);
+      if (!userMutedMicRef.current && activeViewRef.current === 'voice-support' && supportGatePassedRef.current && !isLoadingRef.current) {
+        if (autoListenTimeoutRef.current) clearTimeout(autoListenTimeoutRef.current);
+        autoListenTimeoutRef.current = setTimeout(() => {
+          if (!userMutedMicRef.current && activeViewRef.current === 'voice-support' && supportGatePassedRef.current && !isSarvamRecordingRef.current && !sarvamSpeakingIdRef.current) {
+            handleSarvamMic();
+          }
+        }, 800);
+      }
     } finally {
       setSarvamTtsLoading(null);
     }
@@ -982,17 +1113,86 @@ export default function Home() {
     }
   };
 
-  // ── Sarvam AI STT: MediaRecorder → /api/sarvam/stt ──
+  // ── Sarvam AI STT: MediaRecorder → /api/sarvam/stt (with Hands-Free Phone Call VAD) ──
   const handleSarvamMic = async () => {
+    // If currently recording, user tapped to stop/pause the mic
     if (isSarvamRecording) {
-      sarvamMediaRecorderRef.current?.stop();
+      userMutedMicRef.current = true;
+      if (autoListenTimeoutRef.current) {
+        clearTimeout(autoListenTimeoutRef.current);
+        autoListenTimeoutRef.current = null;
+      }
+      if (sarvamSilenceTimerRef.current) {
+        clearTimeout(sarvamSilenceTimerRef.current);
+        sarvamSilenceTimerRef.current = null;
+      }
+      if (sarvamVadIntervalRef.current) {
+        clearInterval(sarvamVadIntervalRef.current);
+        sarvamVadIntervalRef.current = null;
+      }
+      if (sarvamAudioContextRef.current) {
+        try { sarvamAudioContextRef.current.close(); } catch {}
+        sarvamAudioContextRef.current = null;
+      }
+      if (sarvamStreamRef.current) {
+        sarvamStreamRef.current.getTracks().forEach(t => {
+          try { t.stop(); t.enabled = false; } catch {}
+        });
+        sarvamStreamRef.current = null;
+      }
       if (sarvamSpeechRecRef.current) {
-        try { sarvamSpeechRecRef.current.stop(); } catch {}
+        try {
+          sarvamSpeechRecRef.current.abort();
+          sarvamSpeechRecRef.current.stop();
+        } catch {}
         sarvamSpeechRecRef.current = null;
       }
+      if (sarvamMediaRecorderRef.current && sarvamMediaRecorderRef.current.state === 'recording') {
+        try { sarvamMediaRecorderRef.current.stop(); } catch {}
+      }
+      sarvamMediaRecorderRef.current = null;
       setIsSarvamRecording(false);
       return;
     }
+
+    userMutedMicRef.current = false;
+
+    // Cancel any pending auto-listen timer
+    if (autoListenTimeoutRef.current) {
+      clearTimeout(autoListenTimeoutRef.current);
+      autoListenTimeoutRef.current = null;
+    }
+
+    // If AI is currently speaking, stop it (tap to interrupt)
+    if (sarvamSpeakingId || sarvamCurrentAudioRef.current) {
+      sarvamCurrentAudioRef.current?.pause();
+      sarvamCurrentAudioRef.current = null;
+      setSarvamSpeakingId(null);
+    }
+
+    sarvamSpeechDetectedRef.current = false;
+
+    // Safe stop trigger for silence detector
+    const triggerSilenceStop = () => {
+      if (sarvamSilenceTimerRef.current) {
+        clearTimeout(sarvamSilenceTimerRef.current);
+        sarvamSilenceTimerRef.current = null;
+      }
+      if (sarvamVadIntervalRef.current) {
+        clearInterval(sarvamVadIntervalRef.current);
+        sarvamVadIntervalRef.current = null;
+      }
+      if (sarvamSpeechRecRef.current) {
+        try {
+          sarvamSpeechRecRef.current.abort();
+          sarvamSpeechRecRef.current.stop();
+        } catch {}
+        sarvamSpeechRecRef.current = null;
+      }
+      if (sarvamMediaRecorderRef.current && sarvamMediaRecorderRef.current.state === 'recording') {
+        sarvamMediaRecorderRef.current.stop();
+      }
+    };
 
     // Web Speech API for real-time word-by-word typing into active chat input
     const SpeechRec = typeof window !== 'undefined' && ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
@@ -1004,6 +1204,7 @@ export default function Home() {
         rec.lang = supportLang;
         let finalTxt = '';
         rec.onresult = (e: any) => {
+          sarvamSpeechDetectedRef.current = true;
           let interim = '';
           for (let i = e.resultIndex; i < e.results.length; i++) {
             if (e.results[i].isFinal) {
@@ -1014,6 +1215,14 @@ export default function Home() {
           }
           const full = (finalTxt + ' ' + interim).trim();
           if (full) setInputValue(full);
+
+          // If in Voice Support Phone Call, reset silence timer (1.5s after user stops speaking)
+          if (!userMutedMicRef.current && activeViewRef.current === 'voice-support' && supportGatePassedRef.current) {
+            if (sarvamSilenceTimerRef.current) clearTimeout(sarvamSilenceTimerRef.current);
+            sarvamSilenceTimerRef.current = setTimeout(() => {
+              triggerSilenceStop();
+            }, 1500);
+          }
         };
         rec.onerror = () => {};
         rec.start();
@@ -1025,13 +1234,99 @@ export default function Home() {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      sarvamStreamRef.current = stream;
       const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       sarvamAudioChunksRef.current = [];
       sarvamMediaRecorderRef.current = recorder;
+
+      // Web Audio API VAD (Voice Activity Detection via audio volume amplitude)
+      if (activeViewRef.current === 'voice-support' && supportGatePassedRef.current) {
+        try {
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          if (AudioContextClass) {
+            const audioCtx = new AudioContextClass();
+            sarvamAudioContextRef.current = audioCtx;
+            const source = audioCtx.createMediaStreamSource(stream);
+            const analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 512;
+            analyser.smoothingTimeConstant = 0.3;
+            source.connect(analyser);
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            let consecutiveQuietTicks = 0;
+            const CHECK_INTERVAL = 100; // ms
+
+            sarvamVadIntervalRef.current = setInterval(() => {
+              if (!isSarvamRecordingRef.current) return;
+              analyser.getByteFrequencyData(dataArray);
+              let sum = 0;
+              for (let i = 0; i < bufferLength; i++) {
+                sum += dataArray[i];
+              }
+              const averageVolume = sum / bufferLength;
+
+              // Voice volume threshold
+              if (averageVolume > 14) {
+                sarvamSpeechDetectedRef.current = true;
+                consecutiveQuietTicks = 0;
+                if (sarvamSilenceTimerRef.current) {
+                  clearTimeout(sarvamSilenceTimerRef.current);
+                  sarvamSilenceTimerRef.current = null;
+                }
+              } else if (sarvamSpeechDetectedRef.current) {
+                // User spoke, and now there is silence
+                consecutiveQuietTicks++;
+                // 15 ticks * 100ms = 1.5 seconds of silence
+                if (consecutiveQuietTicks >= 15) {
+                  consecutiveQuietTicks = 0;
+                  sarvamSpeechDetectedRef.current = false;
+                  triggerSilenceStop();
+                }
+              }
+            }, CHECK_INTERVAL);
+          }
+        } catch (vadInitErr) {
+          console.warn('VAD AudioContext init warning:', vadInitErr);
+        }
+      }
+
       recorder.ondataavailable = (e) => { if (e.data.size > 0) sarvamAudioChunksRef.current.push(e.data); };
       recorder.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop());
+        // ALWAYS forcefully stop and release microphone tracks to turn off recording indicator
+        stream.getTracks().forEach(t => {
+          try { t.stop(); t.enabled = false; } catch {}
+        });
+        sarvamStreamRef.current = null;
+
+        // Forcefully release speech recognition instance to release browser microphone
+        if (sarvamSpeechRecRef.current) {
+          try {
+            sarvamSpeechRecRef.current.abort();
+            sarvamSpeechRecRef.current.stop();
+          } catch {}
+          sarvamSpeechRecRef.current = null;
+        }
+
+        if (sarvamVadIntervalRef.current) {
+          clearInterval(sarvamVadIntervalRef.current);
+          sarvamVadIntervalRef.current = null;
+        }
+        if (sarvamSilenceTimerRef.current) {
+          clearTimeout(sarvamSilenceTimerRef.current);
+          sarvamSilenceTimerRef.current = null;
+        }
+        if (sarvamAudioContextRef.current) {
+          try { sarvamAudioContextRef.current.close(); } catch {}
+          sarvamAudioContextRef.current = null;
+        }
         setIsSarvamRecording(false);
+
+        // If user manually tapped mic to pause or ended the call, do not auto-restart or process!
+        if (userMutedMicRef.current || !supportGatePassedRef.current || activeViewRef.current !== 'voice-support') {
+          return;
+        }
+
         const recordDuration = Date.now() - (sarvamRecStartTimeRef.current || 0);
         const blob = new Blob(sarvamAudioChunksRef.current, { type: 'audio/webm' });
 
@@ -1040,19 +1335,29 @@ export default function Home() {
           if (fallback) {
             sendVoiceSupportMessage(fallback);
           } else {
-            const shortMsg = supportLang === 'hi-IN'
-              ? '⚠️ रिकॉर्डिंग बहुत छोटी थी। कृपया माइक दबाकर साफ़ बोलें।'
-              : supportLang === 'mr-IN'
-              ? '⚠️ रेकॉर्डिंग खूप लहान होती. कृपया माइक दाबून स्पष्ट बोला.'
-              : '⚠️ Too short! Please tap the mic and speak clearly.';
-            setToastMessage(shortMsg);
+            if (!userMutedMicRef.current && activeViewRef.current === 'voice-support' && supportGatePassedRef.current) {
+              // Hands-Free Call: resume listening quietly after a short rest
+              if (autoListenTimeoutRef.current) clearTimeout(autoListenTimeoutRef.current);
+              autoListenTimeoutRef.current = setTimeout(() => {
+                if (!userMutedMicRef.current && activeViewRef.current === 'voice-support' && supportGatePassedRef.current && !isSarvamRecordingRef.current && !sarvamSpeakingIdRef.current && !isLoadingRef.current) {
+                  handleSarvamMic();
+                }
+              }, 700);
+            } else {
+              const shortMsg = supportLang === 'hi-IN'
+                ? '⚠️ रिकॉर्डिंग बहुत छोटी थी। कृपया माइक दबाकर साफ़ बोलें।'
+                : supportLang === 'mr-IN'
+                ? '⚠️ रेकॉर्डिंग खूप लहान होती. कृपया माइक दाबून स्पष्ट बोला.'
+                : '⚠️ Too short! Please tap the mic and speak clearly.';
+              setToastMessage(shortMsg);
+            }
           }
           return;
         }
 
         const fd = new FormData();
         fd.append('file', blob, 'audio.webm');
-        fd.append('language_code', supportLang);
+        fd.append('language_code', supportLangRef.current || supportLang);
         fd.append('model', 'saaras:v3');
         try {
           const res = await fetch('/api/sarvam/stt', { method: 'POST', body: fd });
@@ -1066,12 +1371,22 @@ export default function Home() {
             if (fallback) {
               sendVoiceSupportMessage(fallback);
             } else {
-              const noSpeechMsg = supportLang === 'hi-IN'
-                ? '⚠️ आवाज़ सुनाई नहीं दी। कृपया दोबारा बोलें।'
-                : supportLang === 'mr-IN'
-                ? '⚠️ आवाज ऐकू आला नाही. कृपया पुन्हा बोला.'
-                : '⚠️ No speech detected. Please tap the mic and try again.';
-              setToastMessage(noSpeechMsg);
+              if (!userMutedMicRef.current && activeViewRef.current === 'voice-support' && supportGatePassedRef.current) {
+                // Resume listening naturally like a phone call
+                if (autoListenTimeoutRef.current) clearTimeout(autoListenTimeoutRef.current);
+                autoListenTimeoutRef.current = setTimeout(() => {
+                  if (!userMutedMicRef.current && activeViewRef.current === 'voice-support' && supportGatePassedRef.current && !isSarvamRecordingRef.current && !sarvamSpeakingIdRef.current && !isLoadingRef.current) {
+                    handleSarvamMic();
+                  }
+                }, 700);
+              } else {
+                const noSpeechMsg = supportLang === 'hi-IN'
+                  ? '⚠️ आवाज़ सुनाई नहीं दी। कृपया दोबारा बोलें।'
+                  : supportLang === 'mr-IN'
+                  ? '⚠️ आवाज ऐकू आला नाही. कृपया पुन्हा बोला.'
+                  : '⚠️ No speech detected. Please tap the mic and try again.';
+                setToastMessage(noSpeechMsg);
+              }
             }
           }
         } catch (err) { 
@@ -1080,7 +1395,16 @@ export default function Home() {
           if (fallback) {
             sendVoiceSupportMessage(fallback);
           } else {
-            setToastMessage('⚠️ Speech recognition error. Please check your mic and try again.');
+            if (!userMutedMicRef.current && activeViewRef.current === 'voice-support' && supportGatePassedRef.current) {
+              if (autoListenTimeoutRef.current) clearTimeout(autoListenTimeoutRef.current);
+              autoListenTimeoutRef.current = setTimeout(() => {
+                if (!userMutedMicRef.current && activeViewRef.current === 'voice-support' && supportGatePassedRef.current && !isSarvamRecordingRef.current && !sarvamSpeakingIdRef.current && !isLoadingRef.current) {
+                  handleSarvamMic();
+                }
+              }, 1000);
+            } else {
+              setToastMessage('⚠️ Speech recognition error. Please check your mic and try again.');
+            }
           }
         }
       };
@@ -2821,6 +3145,7 @@ export default function Home() {
                       console.warn('Pre-check failed, continuing to server check:', chkErr);
                     }
 
+                    userMutedMicRef.current = false;
                     setSupportGatePassed(true);
                     const currentActiveId = activeSupportSessionId;
                     const welcomeText = supportLang === 'hi-IN'
@@ -3005,20 +3330,7 @@ export default function Home() {
 
                     {/* End Call Button */}
                     <button
-                      onClick={() => {
-                        if (sarvamSpeakingId) {
-                          sarvamCurrentAudioRef.current?.pause();
-                          sarvamCurrentAudioRef.current = null;
-                          setSarvamSpeakingId(null);
-                        }
-                        if (isSarvamRecording) {
-                          sarvamMediaRecorderRef.current?.stop();
-                          setIsSarvamRecording(false);
-                        }
-                        setSupportGatePassed(false);
-                        setSupportOrderId('');
-                        setSupportGateError('');
-                      }}
+                      onClick={endVoiceCall}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-red-600 hover:bg-red-500 rounded-xl transition-all shadow-md shadow-red-600/20 cursor-pointer active:scale-95"
                     >
                       <PhoneOff className="w-3.5 h-3.5" />
@@ -3031,7 +3343,7 @@ export default function Home() {
                 <div className="flex-1 flex flex-col items-center justify-center p-6 relative overflow-hidden">
                   {/* Glowing Ambient Background Glow */}
                   <div className={`absolute w-80 h-80 sm:w-[480px] sm:h-[480px] rounded-full blur-[90px] transition-all duration-700 pointer-events-none opacity-30 ${
-                    isSarvamRecording ? 'bg-red-500 scale-125' :
+                    isSarvamRecording ? 'bg-emerald-500 scale-125' :
                     isLoading ? 'bg-amber-500 scale-110' :
                     sarvamSpeakingId ? 'bg-indigo-500 scale-125' :
                     'bg-violet-600/40'
@@ -3040,14 +3352,14 @@ export default function Home() {
                   {/* Outer Pulsing Waveform Ring */}
                   <div className="relative flex items-center justify-center">
                     <div className={`w-60 h-60 sm:w-72 sm:h-72 rounded-full border flex items-center justify-center transition-all duration-700 ${
-                      isSarvamRecording ? 'border-red-500/40 shadow-[0_0_80px_rgba(239,68,68,0.35)] scale-105' :
+                      isSarvamRecording ? 'border-emerald-500/40 shadow-[0_0_80px_rgba(16,185,129,0.35)] scale-105' :
                       isLoading ? 'border-amber-500/40 shadow-[0_0_70px_rgba(245,158,11,0.35)] animate-spin' :
                       sarvamSpeakingId ? 'border-indigo-500/50 shadow-[0_0_90px_rgba(99,102,241,0.45)] scale-105' :
                       'border-violet-500/25 shadow-[0_0_40px_rgba(139,92,246,0.15)]'
                     }`}>
                       {/* Secondary Ring */}
                       <div className={`w-48 h-48 sm:w-56 sm:h-56 rounded-full border border-dashed flex items-center justify-center transition-all duration-500 ${
-                        isSarvamRecording ? 'border-red-400/50 scale-105' :
+                        isSarvamRecording ? 'border-emerald-400/50 scale-105' :
                         sarvamSpeakingId ? 'border-indigo-400/60 scale-105' :
                         'border-white/10'
                       }`}>
@@ -3067,7 +3379,7 @@ export default function Home() {
                           }}
                           className={`w-36 h-36 sm:w-44 sm:h-44 rounded-full flex flex-col items-center justify-center cursor-pointer transition-all duration-300 shadow-2xl active:scale-95 bg-gradient-to-tr ${
                             isSarvamRecording
-                              ? 'from-red-600 via-rose-500 to-amber-500 shadow-red-500/50 scale-110'
+                              ? 'from-emerald-600 via-teal-500 to-cyan-500 shadow-emerald-500/50 scale-110'
                               : isLoading
                               ? 'from-amber-600 via-orange-500 to-yellow-400 shadow-amber-500/40 animate-pulse'
                               : sarvamSpeakingId
@@ -3109,7 +3421,7 @@ export default function Home() {
                             })}
                           </div>
                           <span className="text-[10px] font-bold text-white/90 uppercase tracking-widest mt-1">
-                            {isSarvamRecording ? 'Stop' : sarvamSpeakingId ? 'Interrupt' : isLoading ? 'Thinking' : 'Tap Mic'}
+                            {isSarvamRecording ? 'Listening' : sarvamSpeakingId ? 'Interrupt' : isLoading ? 'Thinking' : userMutedMicRef.current ? 'Mic Paused' : 'Auto Call'}
                           </span>
                         </div>
                       </div>
@@ -3120,9 +3432,9 @@ export default function Home() {
                   <div className="mt-8 text-center max-w-md">
                     <h3 className="text-xl sm:text-2xl font-black tracking-tight flex items-center justify-center gap-2">
                       {isSarvamRecording && (
-                        <span className="flex items-center gap-2 text-red-500 dark:text-red-400 animate-pulse">
-                          <span className="w-3 h-3 rounded-full bg-red-500 animate-ping" />
-                          {supportLang === 'hi-IN' ? 'सुन रहे हैं... बोलिए' : supportLang === 'mr-IN' ? 'ऐकत आहे... बोला' : 'Listening… Speak now'}
+                        <span className="flex items-center gap-2 text-emerald-500 dark:text-emerald-400 animate-pulse">
+                          <span className="w-3 h-3 rounded-full bg-emerald-500 animate-ping" />
+                          {supportLang === 'hi-IN' ? 'सुन रहे हैं... बोलिए' : supportLang === 'mr-IN' ? 'ऐकत आहे... बोला' : 'Listening… Speak naturally'}
                         </span>
                       )}
                       {isLoading && (
@@ -3139,17 +3451,21 @@ export default function Home() {
                       )}
                       {!isSarvamRecording && !isLoading && !sarvamSpeakingId && (
                         <span className={theme === 'dark' ? 'text-zinc-200' : 'text-zinc-800'}>
-                          {supportLang === 'hi-IN' ? 'माइक पर टैप करके बोलें' : supportLang === 'mr-IN' ? 'माइकवर टॅप करून बोला' : 'Tap to speak'}
+                          {userMutedMicRef.current
+                            ? (supportLang === 'hi-IN' ? 'माइक बंद है · बोलने के लिए टैप करें' : supportLang === 'mr-IN' ? 'माइक बंद आहे · बोलण्यासाठी टॅप करा' : 'Mic Paused · Tap to speak')
+                            : (supportLang === 'hi-IN' ? 'माइक चालू हो रहा है...' : supportLang === 'mr-IN' ? 'माइक सुरू होत आहे...' : 'Connecting mic…')}
                         </span>
                       )}
                     </h3>
 
                     <p className={`text-xs mt-2 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
                       {isSarvamRecording
-                        ? (supportLang === 'hi-IN' ? 'आपकी आवाज़ रिकॉर्ड हो रही है। बोलने के बाद बीच वाले बटन पर टैप करें।' : supportLang === 'mr-IN' ? 'आपला आवाज रेकॉर्ड होत आहे. बोलून झाल्यावर मधल्या बटणावर टॅप करा.' : 'Listening to your voice. Tap the orb when done speaking.')
+                        ? (supportLang === 'hi-IN' ? 'हैंड्स-फ्री कॉल सक्रिय है। अपनी बात बोलें, 1.5 सेकंड रुकने पर यह अपने आप जवाब देगा।' : supportLang === 'mr-IN' ? 'हँड्स-फ्री कॉल सुरू आहे. बोला, 1.5 सेकंद थांबल्यावर आपोआप उत्तर येईल.' : 'Hands-free phone mode active. Speak freely — pauses are auto-detected.')
                         : sarvamSpeakingId
-                        ? (supportLang === 'hi-IN' ? 'नया सवाल पूछने के लिए कभी भी बीच वाले बटन पर टैप करें।' : supportLang === 'mr-IN' ? 'नवीन प्रश्न विचारण्यासाठी कधीही मधल्या बटणावर टॅप करा.' : 'Tap the orb anytime to interrupt and speak a new question.')
-                        : (supportLang === 'hi-IN' ? 'प्योर हैंड्स-फ्री कॉल। कोई कीबोर्ड नहीं, सिर्फ बोलें और सुनें।' : supportLang === 'mr-IN' ? 'प्युअर हँड्स-फ्री कॉल. कीबोर्ड नाही, फक्त बोला आणि ऐका.' : 'Pure hands-free call. No keyboard, just talk naturally.')}
+                        ? (supportLang === 'hi-IN' ? 'नया सवाल पूछने के लिए कभी भी बीच वाले बटन पर टैप करके रोक सकते हैं।' : supportLang === 'mr-IN' ? 'नवीन प्रश्न विचारण्यासाठी कधीही मधल्या बटणावर टॅप करून थांबवू शकता.' : 'Assistant is speaking. Tap the orb anytime to interrupt and ask a question.')
+                        : userMutedMicRef.current
+                        ? (supportLang === 'hi-IN' ? 'माइक बंद कर दिया गया है। जब भी बोलना चाहें, बीच वाले बटन पर टैप करें।' : supportLang === 'mr-IN' ? 'माइक बंद करण्यात आला आहे. जेव्हा बोलायचे असेल तेव्हा मधल्या बटणावर टॅप करा.' : 'Microphone is paused. Tap the orb or mic button whenever you are ready to talk.')
+                        : (supportLang === 'hi-IN' ? 'असली फोन सपोर्ट की तरह — बिना किसी बटन को दबाए सीधे बात करें।' : supportLang === 'mr-IN' ? 'खऱ्या फोन सपोर्टसारखे — कोणतेही बटण न दाबता थेट बोला.' : 'Just like a real phone call — talk freely without tapping any buttons.')}
                     </p>
 
                     {/* Optional Captions Card */}
@@ -3214,17 +3530,21 @@ export default function Home() {
                     disabled={isLoading}
                     className={`w-18 h-18 rounded-full flex items-center justify-center transition-all duration-300 shadow-xl cursor-pointer active:scale-90 disabled:opacity-50 ${
                       isSarvamRecording
-                        ? 'bg-red-600 hover:bg-red-500 text-white shadow-red-600/40 animate-pulse scale-105'
+                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/40 animate-pulse scale-105'
                         : sarvamSpeakingId
                         ? 'bg-gradient-to-tr from-indigo-600 to-violet-600 text-white shadow-indigo-600/40 hover:scale-105'
+                        : userMutedMicRef.current
+                        ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-2 border-zinc-700 shadow-lg hover:scale-105'
                         : 'bg-gradient-to-tr from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-indigo-600/30 hover:scale-105'
                     }`}
-                    title={isSarvamRecording ? 'Stop speaking and send' : 'Tap to speak'}
+                    title={isSarvamRecording ? 'Listening (silence auto-sends, or tap to pause mic)' : sarvamSpeakingId ? 'Tap to interrupt' : userMutedMicRef.current ? 'Mic Paused (tap to speak)' : 'Auto-phone call mode'}
                   >
                     {isSarvamRecording ? (
-                      <MicOff className="w-7 h-7" />
+                      <Mic className="w-7 h-7 animate-pulse text-white" />
                     ) : sarvamSpeakingId ? (
-                      <Mic className="w-7 h-7 animate-pulse" />
+                      <Volume2 className="w-7 h-7 animate-pulse" />
+                    ) : userMutedMicRef.current ? (
+                      <MicOff className="w-7 h-7 text-zinc-400" />
                     ) : (
                       <Mic className="w-7 h-7" />
                     )}
@@ -3232,20 +3552,7 @@ export default function Home() {
 
                   {/* End Call / Hang Up */}
                   <button
-                    onClick={() => {
-                      if (sarvamSpeakingId) {
-                        sarvamCurrentAudioRef.current?.pause();
-                        sarvamCurrentAudioRef.current = null;
-                        setSarvamSpeakingId(null);
-                      }
-                      if (isSarvamRecording) {
-                        sarvamMediaRecorderRef.current?.stop();
-                        setIsSarvamRecording(false);
-                      }
-                      setSupportGatePassed(false);
-                      setSupportOrderId('');
-                      setSupportGateError('');
-                    }}
+                    onClick={endVoiceCall}
                     className="flex items-center gap-2 px-4 py-3 rounded-2xl text-xs font-bold text-white bg-red-600 hover:bg-red-500 transition-all shadow-md shadow-red-600/20 cursor-pointer active:scale-95"
                     title="End Call"
                   >
