@@ -159,7 +159,8 @@ export async function POST(request: Request) {
       }
 
       // Automatically sync newly placed order ownership to the logged-in customer in MongoDB
-      const ordMatch = (enrichedResponse.res || '').match(/ORD-[A-Z0-9]{8}/i);
+      const fullText = `${enrichedResponse.res || ''} ${JSON.stringify(enrichedResponse)}`;
+      const ordMatch = fullText.match(/ORD-[A-Z0-9]{8}/i);
       const placedOrderId = (typeof enrichedResponse.order_id === 'string' && enrichedResponse.order_id)
         ? enrichedResponse.order_id
         : (ordMatch ? ordMatch[0].toUpperCase() : null);

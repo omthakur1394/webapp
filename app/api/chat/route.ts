@@ -38,14 +38,35 @@ export async function POST(request: Request) {
           const db = dbClient.db('shopease_db');
           const orderDoc = await db.collection('orders').findOne({ order_id: finalOrderId });
           if (orderDoc) {
-            if (orderDoc.username === 'webapp' && resolvedUsername) {
+            const currentUName = (resolvedUsername || '').trim().toLowerCase();
+            const currentUId = (resolvedUserId || '').trim();
+            const docUName = (orderDoc.username || '').trim().toLowerCase();
+            const docUId = (orderDoc.user_id || '').trim();
+
+            const isOwner = (docUName && docUName === currentUName) ||
+                            (docUId && (docUId === currentUId || docUId === currentUName)) ||
+                            docUName === 'webapp' ||
+                            !docUName;
+
+            if (!isOwner) {
+              return NextResponse.json(
+                {
+                  error: 'Order ownership mismatch',
+                  res: '⚠️ This order does not belong to your account. Please check your Order ID.',
+                },
+                { status: 403 }
+              );
+            }
+
+            // Always forward the exact credentials stored on this order in MongoDB so FastAPI check matches 100%
+            if (docUName === 'webapp' && currentUName) {
               await db.collection('orders').updateOne(
                 { _id: orderDoc._id },
                 { $set: { username: resolvedUsername, user_id: resolvedUserId } }
               );
-            } else if (orderDoc.username && orderDoc.username !== resolvedUsername) {
-              resolvedUsername = orderDoc.username;
-              resolvedUserId = orderDoc.user_id || resolvedUserId;
+            } else {
+              if (orderDoc.user_id) resolvedUserId = orderDoc.user_id;
+              if (orderDoc.username) resolvedUsername = orderDoc.username;
             }
           }
         } catch (dbFindErr) {

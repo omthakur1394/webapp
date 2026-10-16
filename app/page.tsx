@@ -1515,8 +1515,10 @@ export default function Home() {
           || (typeof data.error === 'string' ? data.error : null)
           || "I'm sorry, I couldn't process your request. Please try again.";
         // Auto-popup Order Confirmed Modal & Append Order ID if Sales Assistant execution placed an order
-        const ordMatch = botMessageContent.match(/ORD-[A-Z0-9]{8}/i);
-        const isOrderPlacedMsg = !botMessageContent.includes('Human Confirmation') && !data?.requires_confirmation && /successfully placed|has been.*placed/i.test(botMessageContent);
+        const ordMatch = botMessageContent.match(/ORD-[A-Z0-9]{8}/i) || (typeof data.order_id === 'string' && data.order_id ? [data.order_id] : null);
+        const isOrderPlacedMsg = !botMessageContent.includes('Human Confirmation') && 
+                                 !data?.requires_confirmation && 
+                                 Boolean(ordMatch || /successfully placed|has been.*placed|executed successfully|order placed/i.test(botMessageContent));
 
         let newOrderId = ordMatch ? ordMatch[0].toUpperCase() : '';
         if (isOrderPlacedMsg) {
@@ -1682,33 +1684,6 @@ export default function Home() {
         if (currentUser) {
           fetchWalletBalance(currentUser.username);
           fetchUserOrders(currentUser.id.toString(), currentUser.username);
-        }
-
-        // Auto-popup Order Confirmed Modal if AI execution placed a new order
-        const ordMatch = cleanedResponse.match(/ORD-[A-Z0-9]{8}/i);
-        const isOrderPlacedMsg = /successfully placed|order.*placed|has been.*placed/i.test(cleanedResponse);
-
-        if (isOrderPlacedMsg) {
-          const newOrderId = ordMatch ? ordMatch[0].toUpperCase() : `ORD-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
-          const titleMatch = cleanedResponse.match(/order for (?:the )?([^!\.,\n]+)/i);
-          const productName = titleMatch ? titleMatch[1].trim() : 'Purchased Item';
-          
-          const priceMatch = cleanedResponse.match(/₹\s*([\d,]+)/);
-          const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : 13490;
-
-          setPlacedOrderId(newOrderId);
-          setPlacedOrderDetailsId(Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join(''));
-          setIsOrderConfirmed(true);
-          setIsChatOpen(false); // Close chat drawer so confirmation modal is front & center
-          setBuyProduct({
-            id: 'chat-order-' + newOrderId,
-            name: productName,
-            price: price,
-            category: 'Electronics',
-            image_url: 'https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?auto=format&fit=crop&w=600&q=80',
-            description: 'Order placed directly via ShopEase Sales Assistant',
-            specs: { Status: 'Order Confirmed', Source: 'Sales Assistant Chat' }
-          });
         }
       } catch (err: any) {
         console.error('Support Chat API request failed:', err);
@@ -3132,8 +3107,11 @@ export default function Home() {
                       const orderUserId = (orderData.user_id || '').toString();
                       const orderUsername = (orderData.username || '').toLowerCase();
 
-                      const isMismatch = (orderUserId && currentUserId && orderUserId !== currentUserId) ||
-                                         (orderUsername && currentUsername && orderUsername !== currentUsername);
+                      const usernameMatches = Boolean(orderUsername && currentUsername && orderUsername === currentUsername);
+                      const userIdMatches = Boolean(orderUserId && currentUserId && (orderUserId === currentUserId || orderUserId === currentUsername));
+                      const isOwner = usernameMatches || userIdMatches || orderUsername === 'webapp';
+                      const isMismatch = !isOwner;
+
                       if (isMismatch) {
                         setSupportGateError(supportLang === 'hi-IN'
                           ? 'यह ऑर्डर आपके खाते से संबंधित नहीं है। कृपया वापस जाएं या अपना ऑर्डर चेक करें।'
@@ -4532,23 +4510,37 @@ export default function Home() {
       {/* Grievance & Support Inbox Modal */}
       {isInboxModalOpen && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-fadeIn">
-          <div className={`border rounded-2xl max-w-2xl w-full p-6 shadow-2xl relative max-h-[85vh] flex flex-col ${
+          <div className={`border rounded-2xl max-w-3xl w-full p-7 shadow-2xl relative max-h-[85vh] flex flex-col ${
             theme === 'dark' ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-zinc-200 text-zinc-900'
           }`}>
             {/* Header */}
-            <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+            <div className={`flex items-center justify-between pb-4 border-b ${
+              theme === 'dark' ? 'border-zinc-800' : 'border-zinc-200'
+            }`}>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-indigo-600/10 border border-indigo-500/20 rounded-xl flex items-center justify-center">
-                  <Inbox className="w-5 h-5 text-indigo-500" />
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center border ${
+                  theme === 'dark'
+                    ? 'bg-indigo-600/15 border-indigo-500/25 text-indigo-400'
+                    : 'bg-indigo-50 border-indigo-200 text-indigo-600'
+                }`}>
+                  <Inbox className="w-6 h-6" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-white">📫 My Grievance & Support Inbox</h3>
-                  <p className="text-[11px] text-zinc-400">Track your complaint status and read official officer response notes</p>
+                  <h3 className={`font-bold text-lg leading-snug ${
+                    theme === 'dark' ? 'text-white' : 'text-zinc-900'
+                  }`}>📫 My Grievance & Support Inbox</h3>
+                  <p className={`text-xs mt-0.5 ${
+                    theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'
+                  }`}>Track your complaint status and read official officer response notes</p>
                 </div>
               </div>
               <button
                 onClick={() => setIsInboxModalOpen(false)}
-                className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                  theme === 'dark'
+                    ? 'hover:bg-zinc-800 text-zinc-400 hover:text-white'
+                    : 'hover:bg-zinc-100 text-zinc-500 hover:text-zinc-900'
+                }`}
               >
                 <X className="w-5 h-5" />
               </button>
@@ -4558,28 +4550,36 @@ export default function Home() {
             <div className="flex-1 overflow-y-auto py-4 space-y-4 pr-1">
               {!currentUser ? (
                 <div className="text-center py-10 space-y-3">
-                  <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
-                  <p className="text-xs text-zinc-400">Please sign in to your ShopEase account to view your grievance inbox.</p>
+                  <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto" />
+                  <p className={`text-sm ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>Please sign in to your ShopEase account to view your grievance inbox.</p>
                   <button
                     onClick={() => {
                       setIsInboxModalOpen(false);
                       setIsAuthModalOpen(true);
                     }}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl"
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl cursor-pointer shadow-md"
                   >
                     Sign In Now
                   </button>
                 </div>
               ) : isInboxLoading ? (
-                <div className="flex items-center justify-center py-12 text-zinc-400 gap-2 text-xs">
-                  <RefreshCw className="w-4 h-4 animate-spin text-indigo-400" />
+                <div className={`flex items-center justify-center py-12 gap-2 text-sm ${
+                  theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'
+                }`}>
+                  <RefreshCw className="w-4 h-4 animate-spin text-indigo-500" />
                   <span>Loading your grievance responses from MongoDB...</span>
                 </div>
               ) : userTickets.length === 0 && userGrievances.length === 0 ? (
-                <div className="text-center py-12 border border-dashed border-zinc-800 rounded-2xl p-6">
-                  <Check className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
-                  <p className="text-xs font-bold text-white mb-1">No Active Grievances or Support Complaints</p>
-                  <p className="text-[11px] text-zinc-400 max-w-sm mx-auto">
+                <div className={`text-center py-12 border border-dashed rounded-2xl p-6 ${
+                  theme === 'dark' ? 'border-zinc-800 bg-zinc-900/40' : 'border-zinc-300 bg-zinc-50'
+                }`}>
+                  <Check className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                  <p className={`text-sm font-bold mb-1 ${
+                    theme === 'dark' ? 'text-white' : 'text-zinc-900'
+                  }`}>No Active Grievances or Support Complaints</p>
+                  <p className={`text-xs max-w-sm mx-auto ${
+                    theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'
+                  }`}>
                     You have zero open support complaints. If you experience an order delivery or missing item issue, contact Support Chat!
                   </p>
                 </div>
@@ -4600,44 +4600,74 @@ export default function Home() {
                     const isResolved = item.status === 'Resolved' || item.status === 'Refunded';
 
                     return (
-                      <div key={item._id || idx} className="p-4 rounded-xl border border-zinc-850 bg-zinc-950/40 space-y-2.5">
-                        <div className="flex items-start justify-between gap-2 border-b border-zinc-850 pb-2.5">
-                          <div>
-                            <span className="font-mono text-indigo-400 text-xs font-bold">
+                      <div key={item._id || idx} className={`p-4.5 rounded-xl border space-y-3 transition-all ${
+                        theme === 'dark'
+                          ? 'border-zinc-800 bg-zinc-950/70'
+                          : 'border-zinc-200 bg-zinc-50/80 shadow-xs hover:border-zinc-300'
+                      }`}>
+                        <div className={`flex items-start justify-between gap-3 border-b pb-3 ${
+                          theme === 'dark' ? 'border-zinc-800' : 'border-zinc-200'
+                        }`}>
+                          <div className="space-y-0.5">
+                            <span className={`font-mono text-xs font-bold tracking-wide ${
+                              theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600'
+                            }`}>
                               Ticket / Order ID: #{item.order_id || item._id?.toString().slice(0, 10)}
                             </span>
                             {item.product_name && (
-                              <p className="text-xs font-medium text-white mt-0.5">{item.product_name} (₹{Number(item.price || 0).toLocaleString('en-IN')})</p>
+                              <p className={`text-xs font-semibold leading-snug mt-0.5 ${
+                                theme === 'dark' ? 'text-white' : 'text-zinc-900'
+                              }`}>{item.product_name} (₹{Number(item.price || 0).toLocaleString('en-IN')})</p>
                             )}
-                            <p className="text-[10px] text-zinc-500">{new Date(item.created_at || Date.now()).toLocaleString()}</p>
+                            <p className={`text-[11px] font-medium ${
+                              theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'
+                            }`}>{new Date(item.created_at || Date.now()).toLocaleString()}</p>
                           </div>
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 ${
+                          <span className={`px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 flex-shrink-0 ${
                             isResolved
-                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                              : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                              ? theme === 'dark'
+                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-250 shadow-xs'
+                              : theme === 'dark'
+                                ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                : 'bg-amber-50 text-amber-800 border-amber-250 shadow-xs'
                           }`}>
-                            {isResolved ? <Check className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                            {isResolved ? <Check className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
                             {item.status || 'Under Investigation'}
                           </span>
                         </div>
 
-                        <p className="text-xs text-zinc-300 leading-relaxed font-medium">
-                          <strong>Issue Filed:</strong> {item.message || 'Order support ticket.'}
+                        <p className={`text-xs leading-relaxed font-medium ${
+                          theme === 'dark' ? 'text-zinc-200' : 'text-zinc-700'
+                        }`}>
+                          <strong className={theme === 'dark' ? 'text-white' : 'text-zinc-900'}>Issue Filed:</strong> {item.message || 'Order support ticket.'}
                         </p>
 
                         {/* Officer Response Note */}
                         {item.officer_response ? (
-                          <div className="p-3 bg-indigo-950/40 border border-indigo-800/40 rounded-xl text-xs space-y-1">
-                            <div className="flex items-center justify-between text-[10px] font-bold text-indigo-400">
+                          <div className={`p-3.5 rounded-xl text-xs space-y-1.5 border ${
+                            theme === 'dark'
+                              ? 'bg-indigo-950/50 border-indigo-800/50 text-indigo-200'
+                              : 'bg-indigo-50/80 border-indigo-200 text-indigo-950'
+                          }`}>
+                            <div className={`flex items-center justify-between text-xs font-bold ${
+                              theme === 'dark' ? 'text-indigo-400' : 'text-indigo-700'
+                            }`}>
                               <span>💬 Official Officer Response ({item.last_handled_by || 'Grievance Desk'}):</span>
                             </div>
-                            <p className="text-indigo-200 text-xs leading-relaxed font-medium">
+                            <p className={`text-xs leading-relaxed font-medium ${
+                              theme === 'dark' ? 'text-indigo-200' : 'text-indigo-900'
+                            }`}>
                               {item.officer_response}
                             </p>
                           </div>
                         ) : (
-                          <div className="p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-[11px] text-zinc-400 flex items-center gap-2">
-                            <Clock className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 animate-spin" />
+                          <div className={`p-3 rounded-xl text-xs flex items-center gap-2 border ${
+                            theme === 'dark'
+                              ? 'bg-zinc-900 border-zinc-800 text-zinc-300'
+                              : 'bg-amber-50/60 border-amber-200 text-amber-900'
+                          }`}>
+                            <Clock className="w-4 h-4 text-amber-500 flex-shrink-0 animate-spin" />
                             <span>Assigned to Level {item.escalation_level || 1} Grievance Officer. Response pending within 24 hours.</span>
                           </div>
                         )}
@@ -4649,10 +4679,16 @@ export default function Home() {
             </div>
 
             {/* Footer */}
-            <div className="pt-4 border-t border-zinc-800 flex justify-end">
+            <div className={`pt-4 border-t flex justify-end ${
+              theme === 'dark' ? 'border-zinc-800' : 'border-zinc-200'
+            }`}>
               <button
                 onClick={() => setIsInboxModalOpen(false)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-bold transition-all"
+                className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  theme === 'dark'
+                    ? 'bg-zinc-800 hover:bg-zinc-700 text-white'
+                    : 'bg-zinc-900 hover:bg-zinc-800 text-white shadow-md'
+                }`}
               >
                 Close Inbox
               </button>
