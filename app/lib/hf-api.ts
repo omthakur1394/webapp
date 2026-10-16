@@ -77,14 +77,11 @@ export async function buildHfAuthHeaders(
     'Content-Type': 'application/json',
   };
 
-  if (incomingAuth) {
-    headers.Authorization = incomingAuth;
-    return headers;
-  }
-
   const token = await getAccessToken();
   if (token) {
     headers.Authorization = `Bearer ${token}`;
+  } else if (incomingAuth) {
+    headers.Authorization = incomingAuth;
   }
 
   return headers;

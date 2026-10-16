@@ -104,17 +104,25 @@ export async function POST(request: Request) {
     let hfSuccess = false;
     let hfData: any = null;
 
+    const resolvedUsername = username || 'Guest';
+    const resolvedUserId = user_id || username || 'Guest';
+
     // Try forwarding to the Hugging Face FastAPI /order endpoint
     try {
       const userAuthHeader = request.headers.get('authorization');
+      const chatLower = (chat || '').trim().toLowerCase();
+      const isConfirm = typeof confirm_action === 'boolean'
+        ? confirm_action
+        : /\b(yes|confirm|proceed|approve|sure|ok|okay|place|buy|can|go ahead|do it)\b/i.test(chatLower);
+
       const response = await hfPost(
         orderUrl, 
         { 
           chat, 
           thread_id,
-          confirm_action: typeof confirm_action === 'boolean' ? confirm_action : false,
-          user_id: user_id || "",
-          username: username || ""
+          confirm_action: isConfirm,
+          user_id: resolvedUserId,
+          username: resolvedUsername
         },
         userAuthHeader
       );
@@ -149,6 +157,30 @@ export async function POST(request: Request) {
           enrichedResponse.res = JSON.stringify(enrichedResponse);
         }
       }
+
+      // Automatically sync newly placed order ownership to the logged-in customer in MongoDB
+      const ordMatch = (enrichedResponse.res || '').match(/ORD-[A-Z0-9]{8}/i);
+      const placedOrderId = (typeof enrichedResponse.order_id === 'string' && enrichedResponse.order_id)
+        ? enrichedResponse.order_id
+        : (ordMatch ? ordMatch[0].toUpperCase() : null);
+
+      if (placedOrderId && resolvedUsername) {
+        let client: MongoClient | null = null;
+        try {
+          client = new MongoClient(MONGO_URI);
+          await client.connect();
+          const db = client.db('shopease_db');
+          await db.collection('orders').updateOne(
+            { order_id: placedOrderId },
+            { $set: { username: resolvedUsername, user_id: resolvedUserId } }
+          );
+        } catch (dbSyncErr) {
+          console.warn('Failed to assign customer username to new order:', dbSyncErr);
+        } finally {
+          if (client) await client.close();
+        }
+      }
+
       return NextResponse.json(enrichedResponse);
     }
 

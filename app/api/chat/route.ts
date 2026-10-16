@@ -26,14 +26,43 @@ export async function POST(request: Request) {
 
     try {
       const userAuthHeader = request.headers.get('authorization');
+
+      let resolvedUserId = user_id || username || '';
+      let resolvedUsername = username || '';
+
+      if (finalOrderId) {
+        let dbClient: MongoClient | null = null;
+        try {
+          dbClient = new MongoClient(MONGO_URI);
+          await dbClient.connect();
+          const db = dbClient.db('shopease_db');
+          const orderDoc = await db.collection('orders').findOne({ order_id: finalOrderId });
+          if (orderDoc) {
+            if (orderDoc.username === 'webapp' && resolvedUsername) {
+              await db.collection('orders').updateOne(
+                { _id: orderDoc._id },
+                { $set: { username: resolvedUsername, user_id: resolvedUserId } }
+              );
+            } else if (orderDoc.username && orderDoc.username !== resolvedUsername) {
+              resolvedUsername = orderDoc.username;
+              resolvedUserId = orderDoc.user_id || resolvedUserId;
+            }
+          }
+        } catch (dbFindErr) {
+          console.warn('Order pre-lookup failed:', dbFindErr);
+        } finally {
+          if (dbClient) await dbClient.close();
+        }
+      }
+
       const response = await hfPost(
         hfApiUrl,
         {
           chat: finalQuestion,
           order_id: finalOrderId,
           thread_id: thread_id,
-          user_id: user_id || "",
-          username: username || "",
+          user_id: resolvedUserId,
+          username: resolvedUsername,
         },
         userAuthHeader
       );

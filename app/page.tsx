@@ -1489,7 +1489,8 @@ export default function Home() {
           body: JSON.stringify({
             chat: text,
             thread_id: currentSessionId,
-            username: currentUser?.username || 'Guest',
+            username: currentUser?.username || '',
+            user_id: currentUser?.id?.toString() || currentUser?.username || '',
             shipping_address: currentUser ? '123 E-Commerce Way, Tech City' : ''
           }),
         });
