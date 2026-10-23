@@ -80,6 +80,13 @@ export async function POST(request: Request) {
       );
     }
 
+    if (order.status === 'Delivered') {
+      return NextResponse.json(
+        { error: 'Cannot modify order: This order has already been delivered and is finalized.' },
+        { status: 400 }
+      );
+    }
+
     const updateFields: any = {
       updated_at: new Date(),
       last_modified_by: region
@@ -106,6 +113,8 @@ export async function POST(request: Request) {
       updateFields.held_at = new Date();
       updateFields.held_by_region = region;
       message = `Order ${order_id} put on hold successfully.`;
+    } else if (action === 'note') {
+      message = `System note updated for order ${order_id}.`;
     }
 
     if (admin_note) {

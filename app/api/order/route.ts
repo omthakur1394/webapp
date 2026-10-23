@@ -160,26 +160,46 @@ export async function POST(request: Request) {
 
       // Automatically sync newly placed order ownership to the logged-in customer in MongoDB
       const fullText = `${enrichedResponse.res || ''} ${JSON.stringify(enrichedResponse)}`;
-      const ordMatch = fullText.match(/ORD-[A-Z0-9]{8}/i);
-      const placedOrderId = (typeof enrichedResponse.order_id === 'string' && enrichedResponse.order_id)
+      let ordMatch = fullText.match(/ORD-[A-Z0-9]{8}/i);
+      let placedOrderId = (typeof enrichedResponse.order_id === 'string' && enrichedResponse.order_id)
         ? enrichedResponse.order_id
         : (ordMatch ? ordMatch[0].toUpperCase() : null);
 
-      if (placedOrderId && resolvedUsername) {
-        let client: MongoClient | null = null;
-        try {
-          client = new MongoClient(MONGO_URI);
-          await client.connect();
-          const db = client.db('shopease_db');
+      let client: MongoClient | null = null;
+      try {
+        client = new MongoClient(MONGO_URI);
+        await client.connect();
+        const db = client.db('shopease_db');
+
+        // If the LLM omitted the Order ID in its conversational text, retrieve the actual order created in MongoDB
+        if (!placedOrderId && /successfully placed|has been.*placed|executed successfully|order placed/i.test(fullText)) {
+          const thirtySecondsAgo = new Date(Date.now() - 30 * 1000);
+          const recentOrder = await db.collection('orders').findOne(
+            { created_at: { $gte: thirtySecondsAgo } },
+            { sort: { created_at: -1 } }
+          );
+          if (recentOrder && recentOrder.order_id) {
+            placedOrderId = recentOrder.order_id;
+            enrichedResponse.order_id = recentOrder.order_id;
+            enrichedResponse.product_name = recentOrder.product_name;
+            enrichedResponse.price = recentOrder.price;
+            if (typeof enrichedResponse.res === 'string' && !enrichedResponse.res.includes(placedOrderId)) {
+              enrichedResponse.res = `${enrichedResponse.res.trim()}\n\nOrder ID: **${placedOrderId}**`;
+            }
+          }
+        }
+
+        if (placedOrderId && resolvedUsername) {
           await db.collection('orders').updateOne(
             { order_id: placedOrderId },
             { $set: { username: resolvedUsername, user_id: resolvedUserId } }
           );
-        } catch (dbSyncErr) {
-          console.warn('Failed to assign customer username to new order:', dbSyncErr);
-        } finally {
-          if (client) await client.close();
+          enrichedResponse.order_id = placedOrderId;
         }
+      } catch (dbSyncErr) {
+        console.warn('Failed to assign customer username to new order:', dbSyncErr);
+      } finally {
+        if (client) await client.close();
       }
 
       return NextResponse.json(enrichedResponse);

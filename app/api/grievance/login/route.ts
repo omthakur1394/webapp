@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
+import { MongoClient } from 'mongodb';
+
+const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://omthakur:sxB1fxPqt50ddAT5@cluster0.lv5os6g.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 
 export async function POST(request: Request) {
+  let client: MongoClient | null = null;
   try {
     const body = await request.json();
     const { email, password } = body;
@@ -10,59 +14,46 @@ export async function POST(request: Request) {
     }
 
     const cleanEmail = email.trim().toLowerCase();
+    const trimmedPassword = password.trim();
 
-    if (cleanEmail === 'support@shopease.com' && password === 'support123') {
-      return NextResponse.json({
-        success: true,
-        user: {
-          name: 'Customer Support Agent',
-          email: 'support@shopease.com',
-          role: 'Level 1 Support',
-          level: 1,
-          badgeColor: 'indigo'
-        }
-      });
-    } else if (cleanEmail === 'escalations@shopease.com' && password === 'escalate123') {
-      return NextResponse.json({
-        success: true,
-        user: {
-          name: 'Senior Escalations Officer',
-          email: 'escalations@shopease.com',
-          role: 'Level 2 Escalations',
-          level: 2,
-          badgeColor: 'purple'
-        }
-      });
-    } else if (cleanEmail === 'security@shopease.com' && password === 'security123') {
-      return NextResponse.json({
-        success: true,
-        user: {
-          name: 'Security & Fraud Specialist',
-          email: 'security@shopease.com',
-          role: 'Level 3 Security Desk',
-          level: 3,
-          badgeColor: 'rose'
-        }
-      });
-    } else if (
-      (cleanEmail === 'grievance.officer@shopease.in' || cleanEmail === 'legalnotices@shopease.in') &&
-      (password === 'legal123' || password === 'grievance123')
-    ) {
-      return NextResponse.json({
-        success: true,
-        user: {
-          name: 'Mr. Rohan Sharma',
-          email: cleanEmail,
-          role: 'Chief Grievance Officer (CGO)',
-          level: 4,
-          badgeColor: 'amber'
-        }
-      });
+    client = new MongoClient(MONGO_URI);
+    await client.connect();
+    const db = client.db('shopease_db');
+    const officersCollection = db.collection('grievance_officers');
+
+    // Query officer strictly from MongoDB database
+    const officer = await officersCollection.findOne({
+      email: { $regex: new RegExp(`^${cleanEmail}$`, 'i') },
+      password: trimmedPassword
+    });
+
+    if (!officer) {
+      return NextResponse.json(
+        { error: 'Invalid credentials or unauthorized grievance account' },
+        { status: 401 }
+      );
     }
 
-    return NextResponse.json({ error: 'Invalid credentials or unauthorized grievance account' }, { status: 401 });
+    // Update last login timestamp in database
+    await officersCollection.updateOne(
+      { _id: officer._id },
+      { $set: { last_login: new Date() } }
+    );
+
+    return NextResponse.json({
+      success: true,
+      user: {
+        name: officer.name,
+        email: officer.email,
+        role: officer.role,
+        level: officer.level,
+        badgeColor: officer.badgeColor || 'indigo'
+      }
+    });
   } catch (err: any) {
-    console.error('Error logging in grievance officer:', err);
+    console.error('Error logging in grievance officer from MongoDB:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
+  } finally {
+    if (client) await client.close();
   }
 }

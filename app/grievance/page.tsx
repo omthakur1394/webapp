@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, Lock, RefreshCw, AlertTriangle, CheckCircle, LogOut, 
-  User, Send, MessageSquare, AlertOctagon, ArrowLeft, Filter, FileText, Check, ArrowRight, Clock
+  User, Send, MessageSquare, AlertOctagon, ArrowLeft, Filter, FileText, Check, ArrowRight, Clock,
+  Sun, Moon
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -27,6 +28,7 @@ export default function GrievancePortalPage() {
   const [pausedOrders, setPausedOrders] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
 
   // Response inputs
   const [responseInputs, setResponseInputs] = useState<Record<string, string>>({});
@@ -43,7 +45,21 @@ export default function GrievancePortalPage() {
         console.error('Failed to parse officer session:', e);
       }
     }
+    const savedTheme = localStorage.getItem('shopease_theme') as 'light' | 'dark' | null;
+    if (savedTheme === 'light' || savedTheme === 'dark') {
+      setTheme(savedTheme);
+      document.documentElement.classList.toggle('dark', savedTheme === 'dark');
+      document.documentElement.classList.toggle('light', savedTheme === 'light');
+    }
   }, []);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(nextTheme);
+    localStorage.setItem('shopease_theme', nextTheme);
+    document.documentElement.classList.toggle('dark', nextTheme === 'dark');
+    document.documentElement.classList.toggle('light', nextTheme === 'light');
+  };
 
   const fetchTicketsData = async (lvl?: number) => {
     const targetLevel = lvl ?? officer?.level ?? 1;
@@ -146,22 +162,32 @@ export default function GrievancePortalPage() {
   if (!mounted) return null;
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+    <div className={`portal-typography-22 min-h-screen flex flex-col font-sans transition-colors duration-200 selection:bg-indigo-500 selection:text-white ${
+      theme === 'dark' ? 'bg-zinc-950 text-zinc-100' : 'bg-zinc-50 text-zinc-900'
+    }`}>
       {toast && (
-        <div className="fixed bottom-5 right-5 bg-zinc-900 border border-zinc-800 text-white px-4 py-2.5 rounded-xl shadow-2xl z-50 text-xs font-bold animate-fadeIn flex items-center gap-2">
+        <div className={`fixed bottom-5 right-5 border px-4 py-2.5 rounded-xl shadow-2xl z-50 text-xs font-bold animate-fadeIn flex items-center gap-2 ${
+          theme === 'dark' ? 'bg-zinc-900 border-zinc-800 text-white' : 'bg-white border-zinc-200 text-zinc-900'
+        }`}>
           <CheckCircle className="w-4 h-4 text-emerald-400" />
           <span>{toast}</span>
         </div>
       )}
 
       {/* Internal Portal Header */}
-      <header className="border-b border-zinc-900 bg-zinc-900/60 backdrop-blur-md px-6 py-4 flex items-center justify-between sticky top-0 z-30">
+      <header className={`border-b px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between sticky top-0 z-30 backdrop-blur-md transition-colors ${
+        theme === 'dark' ? 'border-zinc-900 bg-zinc-900/60' : 'border-zinc-200 bg-white/90'
+      }`}>
         <div className="flex items-center gap-3">
-          <Link href="/" className="p-2 rounded-lg border border-zinc-800 hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-white cursor-pointer">
+          <Link href="/" className={`p-2 rounded-lg border transition-colors cursor-pointer ${
+            theme === 'dark' ? 'border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-white' : 'border-zinc-200 hover:bg-zinc-100 text-zinc-600 hover:text-zinc-900'
+          }`}>
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <div>
-            <h1 className="text-sm font-extrabold text-white flex items-center gap-2">
+            <h1 className={`text-sm font-extrabold flex items-center gap-2 ${
+              theme === 'dark' ? 'text-white' : 'text-zinc-900'
+            }`}>
               <img src="/logo-icon.svg" alt="ShopEase Logo" className="w-5 h-5 object-contain" />
               ShopEase Internal Grievance & Escalations Operations Dashboard
             </h1>
@@ -169,23 +195,51 @@ export default function GrievancePortalPage() {
           </div>
         </div>
 
-        {officer && (
-          <div className="flex items-center gap-3">
-            <span className="text-[11px] font-bold px-3 py-1 bg-indigo-600/10 border border-indigo-500/20 text-indigo-400 rounded-full flex items-center gap-1.5">
-              <User className="w-3 h-3 text-indigo-400" /> {officer.name} ({officer.role})
-            </span>
-            <button
-              onClick={handleLogout}
-              className="p-2 rounded-lg border border-red-500/10 hover:bg-red-500/10 text-red-400 transition-colors cursor-pointer"
-              title="Logout Officer"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {/* Proper Dark / Light Mode Switcher */}
+          <button
+            id="grievance-theme-toggle"
+            onClick={toggleTheme}
+            className={`p-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 border text-xs font-semibold ${
+              theme === 'dark'
+                ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-850 text-amber-300 shadow-xs'
+                : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200 text-zinc-700 shadow-xs'
+            }`}
+            title={theme === 'dark' ? "Switch to Light Mode" : "Switch to Dark Mode"}
+          >
+            {theme === 'dark' ? (
+              <>
+                <Sun className="w-4 h-4 text-amber-400" />
+                <span className="hidden sm:inline text-[11px] font-bold">Light</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-4 h-4 text-indigo-600" />
+                <span className="hidden sm:inline text-[11px] font-bold">Dark</span>
+              </>
+            )}
+          </button>
+
+          {officer && (
+            <div className="flex items-center gap-3">
+              <span className={`text-[11px] font-bold px-3 py-1 rounded-full flex items-center gap-1.5 border ${
+                theme === 'dark' ? 'bg-indigo-600/10 border-indigo-500/20 text-indigo-400' : 'bg-indigo-50 border-indigo-200 text-indigo-700'
+              }`}>
+                <User className="w-3 h-3 text-indigo-500" /> {officer.name} ({officer.role})
+              </span>
+              <button
+                onClick={handleLogout}
+                className="p-2 rounded-lg border border-red-500/10 hover:bg-red-500/10 text-red-400 transition-colors cursor-pointer"
+                title="Logout Officer"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
-      <main className="flex-1 p-6 max-w-7xl mx-auto w-full">
+      <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1720px] mx-auto w-full">
         {!officer ? (
           /* Internal Officer Login Screen */
           <div className="max-w-md mx-auto my-12">
@@ -246,19 +300,46 @@ export default function GrievancePortalPage() {
           /* Grievance Dashboard Queue & Management */
           <div className="space-y-6">
             {/* Officer Banner */}
-            <div className="bg-zinc-900/60 border border-zinc-850 p-5 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-lg">
+            <div className={`p-5 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-lg border transition-colors ${
+              theme === 'dark' ? 'bg-zinc-900/60 border-zinc-850' : 'bg-white border-zinc-200'
+            }`}>
               <div>
                 <span className="text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded bg-indigo-600 text-white inline-block mb-1">
                   Active Session: Level {officer.level}
                 </span>
-                <h2 className="text-base font-extrabold text-white">{officer.name} — {officer.role}</h2>
-                <p className="text-xs text-zinc-400 mt-0.5">Authenticated Email: <code className="text-indigo-400 font-mono">{officer.email}</code></p>
+                <h2 className={`text-base font-extrabold ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>{officer.name} — {officer.role}</h2>
+                <p className={`text-xs mt-0.5 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-600'}`}>Authenticated Email: <code className="text-indigo-500 font-mono">{officer.email}</code></p>
               </div>
 
               <div className="flex items-center gap-3">
+                {/* Banner Quick Theme Toggle */}
+                <button
+                  onClick={toggleTheme}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer shadow-xs ${
+                    theme === 'dark'
+                      ? 'bg-zinc-800 hover:bg-zinc-750 text-amber-300 border-zinc-700'
+                      : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border-zinc-200'
+                  }`}
+                  title={theme === 'dark' ? "Switch to Light Mode" : "Switch to Dark Mode"}
+                >
+                  {theme === 'dark' ? (
+                    <>
+                      <Sun className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Light Mode</span>
+                    </>
+                  ) : (
+                    <>
+                      <Moon className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Dark Mode</span>
+                    </>
+                  )}
+                </button>
+
                 <button
                   onClick={() => fetchTicketsData()}
-                  className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl border border-zinc-700 transition-all flex items-center gap-1.5 cursor-pointer"
+                  className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5 cursor-pointer ${
+                    theme === 'dark' ? 'bg-zinc-800 hover:bg-zinc-700 text-white border-zinc-700' : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-800 border-zinc-200'
+                  }`}
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
                   <span>Refresh Queue</span>
@@ -267,10 +348,14 @@ export default function GrievancePortalPage() {
             </div>
 
             {/* Main Grievance Queue */}
-            <div className="bg-zinc-900/60 border border-zinc-850 p-6 rounded-2xl shadow-xl space-y-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-zinc-850 pb-4">
+            <div className={`border p-6 rounded-2xl shadow-xl space-y-4 transition-colors ${
+              theme === 'dark' ? 'bg-zinc-900/60 border-zinc-850' : 'bg-white border-zinc-200'
+            }`}>
+              <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b pb-4 ${
+                theme === 'dark' ? 'border-zinc-850' : 'border-zinc-200'
+              }`}>
                 <div>
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <h3 className={`text-sm font-bold flex items-center gap-2 ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>
                     📋 Level {officer.level} Queue — Assigned to {officer.role}
                   </h3>
                   <p className="text-[10px] text-zinc-500">Live complaints routed strictly to Level {officer.level} ({officer.name})</p>
@@ -287,7 +372,7 @@ export default function GrievancePortalPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="border-b border-zinc-850 text-zinc-500">
+                    <tr className={`border-b text-zinc-500 ${theme === 'dark' ? 'border-zinc-850' : 'border-zinc-200'}`}>
                       <th className="pb-3 font-bold uppercase tracking-wider">Ticket / Order ID</th>
                       <th className="pb-3 font-bold uppercase tracking-wider">Customer / Issue Description</th>
                       <th className="pb-3 font-bold uppercase tracking-wider">Assigned Level</th>
@@ -295,7 +380,7 @@ export default function GrievancePortalPage() {
                       <th className="pb-3 font-bold uppercase tracking-wider text-right">Officer Response & Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-850">
+                  <tbody className={`divide-y ${theme === 'dark' ? 'divide-zinc-850' : 'divide-zinc-200'}`}>
                     {tickets.length === 0 && pausedOrders.length === 0 ? (
                       <tr>
                         <td colSpan={5} className="py-8 text-center text-zinc-500">No Level {officer.level} grievances currently pending in your queue.</td>
@@ -320,15 +405,15 @@ export default function GrievancePortalPage() {
                         const isResolved = ['Resolved', 'Refunded', 'Rejected', 'Replacement Order Placed', 'Replacement Placed', 'Replaced'].includes(tkt.status);
 
                         return (
-                          <tr key={tkt._id || idx} className="hover:bg-zinc-850/[0.2] transition-all">
+                          <tr key={tkt._id || idx} className={`transition-all ${theme === 'dark' ? 'hover:bg-zinc-900/40' : 'hover:bg-zinc-100/70'}`}>
                             {/* Order / Ticket ID */}
                             <td className="py-4 font-bold align-top">
-                              <div className="font-mono text-indigo-400">{tkt.order_id || tkt._id?.toString().slice(0, 10)}</div>
+                              <div className={`font-mono ${theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600 font-bold'}`}>{tkt.order_id || tkt._id?.toString().slice(0, 10)}</div>
                               <div className="text-[9px] text-zinc-500 font-normal mt-0.5">
                                 {new Date(tkt.created_at || Date.now()).toLocaleString()}
                               </div>
                               {tkt.product_name && (
-                                <div className="text-[10px] text-zinc-300 font-medium mt-1">
+                                <div className={`text-[10px] font-medium mt-1 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-700 font-semibold'}`}>
                                   {tkt.product_name} (₹{Number(tkt.price || 0).toLocaleString('en-IN')})
                                 </div>
                               )}
@@ -336,12 +421,16 @@ export default function GrievancePortalPage() {
 
                             {/* Issue Content */}
                             <td className="py-4 align-top max-w-[260px]">
-                              <p className="text-zinc-200 font-medium text-xs leading-relaxed line-clamp-3">
+                              <p className={`font-medium text-xs leading-relaxed line-clamp-3 ${theme === 'dark' ? 'text-zinc-200' : 'text-zinc-800'}`}>
                                 {tkt.message || tkt.issue || 'Customer submitted order grievance.'}
                               </p>
                               {!isResolved && tkt.officer_response && (
-                                <div className="mt-1.5 p-2 bg-indigo-950/40 border border-indigo-800/40 rounded-lg text-[10px] text-indigo-300">
-                                  💬 <strong>Officer Note ({tkt.last_handled_by || 'Officer'}):</strong> {tkt.officer_response}
+                                <div className={`mt-1.5 p-2 rounded-lg text-[10px] border transition-colors ${
+                                  theme === 'dark'
+                                    ? 'bg-indigo-950/40 border-indigo-800/40 text-indigo-300'
+                                    : 'bg-indigo-50 border-indigo-200 text-indigo-900 font-medium'
+                                }`}>
+                                  💬 <strong className={theme === 'dark' ? 'text-indigo-200' : 'text-indigo-800'}>Officer Note ({tkt.last_handled_by || 'Officer'}):</strong> {tkt.officer_response}
                                 </div>
                               )}
                             </td>
@@ -374,16 +463,22 @@ export default function GrievancePortalPage() {
                             </td>
 
                             {/* Officer Response & Escalation Controls */}
-                            <td className="py-4 align-top text-right space-y-3 min-w-[320px]">
+                            <td className="py-4 align-top text-right space-y-3 min-w-[420px]">
                               {isResolved ? (
-                                <div className="bg-zinc-950 border border-emerald-500/30 rounded-xl p-3 text-left space-y-2 shadow-sm">
+                                <div className={`border rounded-xl p-3 text-left space-y-2 shadow-sm transition-colors ${
+                                  theme === 'dark' ? 'bg-zinc-950 border-emerald-500/30' : 'bg-emerald-50/70 border-emerald-200'
+                                }`}>
                                   <div className="flex items-center justify-between">
-                                    <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1.5">
+                                    <span className={`text-[11px] font-bold flex items-center gap-1.5 ${
+                                      theme === 'dark' ? 'text-emerald-400' : 'text-emerald-700'
+                                    }`}>
                                       <CheckCircle className="w-3.5 h-3.5" /> Resolution Completed ({tkt.status})
                                     </span>
                                     <button
                                       onClick={() => handleUpdateTicket(tkt._id, tkt.order_id, 'Pending', tktLevel, undefined)}
-                                      className="text-[9.5px] text-zinc-500 hover:text-zinc-300 underline cursor-pointer transition-colors"
+                                      className={`text-[9.5px] underline cursor-pointer transition-colors ${
+                                        theme === 'dark' ? 'text-zinc-500 hover:text-zinc-300' : 'text-zinc-600 hover:text-zinc-800'
+                                      }`}
                                       title="Reopen ticket to edit resolution options"
                                     >
                                       Reopen Ticket
@@ -391,8 +486,10 @@ export default function GrievancePortalPage() {
                                   </div>
 
                                   {(tkt.officer_response || tkt.admin_note) ? (
-                                    <div className="bg-zinc-900/80 p-2 rounded-lg border border-zinc-800 text-xs text-zinc-300 leading-relaxed">
-                                      💬 <strong className="text-indigo-300 font-semibold">Resolution Note:</strong> {tkt.officer_response || tkt.admin_note}
+                                    <div className={`p-2 rounded-lg border text-xs leading-relaxed transition-colors ${
+                                      theme === 'dark' ? 'bg-zinc-900/80 border-zinc-800 text-zinc-300' : 'bg-white border-emerald-200 text-zinc-800 shadow-xs'
+                                    }`}>
+                                      💬 <strong className={theme === 'dark' ? 'text-indigo-300 font-semibold' : 'text-indigo-700 font-semibold'}>Resolution Note:</strong> {tkt.officer_response || tkt.admin_note}
                                     </div>
                                   ) : (
                                     <div className="text-[10px] text-zinc-500 italic">No notes recorded during resolution.</div>
@@ -400,12 +497,12 @@ export default function GrievancePortalPage() {
 
                                   {tkt.last_handled_by && (
                                     <div className="text-[9.5px] text-zinc-500 font-mono text-right">
-                                      Handled by: <span className="text-indigo-400">{tkt.last_handled_by}</span>
+                                      Handled by: <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{tkt.last_handled_by}</span>
                                     </div>
                                   )}
                                 </div>
                               ) : (
-                                <div className="flex flex-col gap-2">
+                                <div className={`flex flex-col gap-2`}>
                                   {/* Large Textarea Box for Officer Notes */}
                                   <div>
                                     <textarea
@@ -413,7 +510,9 @@ export default function GrievancePortalPage() {
                                       placeholder="Type official investigation findings, officer resolution notes, or dispatch details..."
                                       value={responseInputs[tkt._id] || ''}
                                       onChange={(e) => setResponseInputs({ ...responseInputs, [tkt._id]: e.target.value })}
-                                      className="w-full bg-zinc-950 border border-zinc-800 text-white text-xs rounded-xl p-2.5 outline-none focus:border-indigo-500 font-sans leading-relaxed resize-y min-h-[70px] placeholder:text-zinc-600"
+                                      className={`w-full border text-xs rounded-xl p-2.5 outline-none focus:border-indigo-500 font-sans leading-relaxed resize-y min-h-[70px] ${
+                                        theme === 'dark' ? 'bg-zinc-950 border-zinc-800 text-white placeholder:text-zinc-600' : 'bg-zinc-50 border-zinc-200 text-zinc-900 placeholder:text-zinc-400'
+                                      }`}
                                     />
                                   </div>
 
@@ -422,7 +521,7 @@ export default function GrievancePortalPage() {
                                     {/* 1. Full Refund */}
                                     <button
                                       onClick={() => handleUpdateTicket(tkt._id, tkt.order_id, 'Refunded', tktLevel, responseInputs[tkt._id])}
-                                      className="px-2.5 py-1 bg-emerald-650 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm"
                                       title="Process full refund to customer wallet"
                                     >
                                       <span>💳 Full Refund</span>
@@ -440,7 +539,7 @@ export default function GrievancePortalPage() {
                                     {/* 3. Rejected */}
                                     <button
                                       onClick={() => handleUpdateTicket(tkt._id, tkt.order_id, 'Rejected', tktLevel, responseInputs[tkt._id])}
-                                      className="px-2.5 py-1 bg-rose-650 hover:bg-rose-500 text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                                      className="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm"
                                       title="Reject grievance claim"
                                     >
                                       <span>❌ Reject Claim</span>
@@ -459,7 +558,7 @@ export default function GrievancePortalPage() {
                                     {officer.level < 4 && (
                                       <button
                                         onClick={() => handleUpdateTicket(tkt._id, tkt.order_id, `Escalated to Level ${officer.level + 1}`, officer.level + 1, responseInputs[tkt._id])}
-                                        className="px-2.5 py-1 bg-purple-650 hover:bg-purple-500 text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                                        className="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1 shadow-sm"
                                         title={`Escalate to Level ${officer.level + 1}`}
                                       >
                                         <span>Escalate ➔ L{officer.level + 1}</span>

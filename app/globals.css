@@ -1,8 +1,21 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --background: #ffffff;
   --foreground: #171717;
+}
+
+html.dark, :root.dark {
+  --background: #09090b;
+  --foreground: #ededed;
+  color-scheme: dark;
+}
+
+html.light, :root.light {
+  --background: #ffffff;
+  --foreground: #171717;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -12,15 +25,8 @@
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 html {
-  font-size: 21px;
+  font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -29,68 +35,75 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-roboto), 'Roboto', sans-serif;
-  font-size: 21px;
+  font-size: 16px;
+  line-height: 1.5;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Comprehensive Typography Scale: Target 22px baseline for Admin & Grievance portals */
+.portal-typography-22 {
+  font-size: 22px;
   line-height: 1.6;
 }
 
-/* Comprehensive Typography Scale: Target 20px - 22px baseline across the entire application */
-.text-xs,
-[class*="text-xs"],
-[class*="text-[8px]"],
-[class*="text-[9px]"],
-[class*="text-[10px]"],
-[class*="text-[11px]"],
-[class*="text-[12px]"] {
+.portal-typography-22 .text-xs,
+.portal-typography-22 [class*="text-xs"],
+.portal-typography-22 [class*="text-[8px]"],
+.portal-typography-22 [class*="text-[9px]"],
+.portal-typography-22 [class*="text-[10px]"],
+.portal-typography-22 [class*="text-[11px]"],
+.portal-typography-22 [class*="text-[12px]"] {
   font-size: 19px !important;
   line-height: 1.5 !important;
 }
 
-.text-sm,
-[class*="text-sm"],
-[class*="text-[13px]"],
-[class*="text-[14px]"],
-[class*="text-[15px]"] {
+.portal-typography-22 .text-sm,
+.portal-typography-22 [class*="text-sm"],
+.portal-typography-22 [class*="text-[13px]"],
+.portal-typography-22 [class*="text-[14px]"],
+.portal-typography-22 [class*="text-[15px]"] {
   font-size: 21px !important;
   line-height: 1.55 !important;
 }
 
-.text-base,
-[class*="text-base"],
-[class*="text-[16px]"],
-[class*="text-[17px]"] {
+.portal-typography-22 .text-base,
+.portal-typography-22 [class*="text-base"],
+.portal-typography-22 [class*="text-[16px]"],
+.portal-typography-22 [class*="text-[17px]"] {
   font-size: 22px !important;
   line-height: 1.6 !important;
 }
 
-.text-lg,
-[class*="text-lg"],
-[class*="text-[18px]"],
-[class*="text-[19px]"] {
+.portal-typography-22 .text-lg,
+.portal-typography-22 [class*="text-lg"],
+.portal-typography-22 [class*="text-[18px]"],
+.portal-typography-22 [class*="text-[19px]"] {
   font-size: 24px !important;
   line-height: 1.5 !important;
 }
 
-.text-xl,
-[class*="text-xl"],
-[class*="text-[20px]"] {
+.portal-typography-22 .text-xl,
+.portal-typography-22 [class*="text-xl"],
+.portal-typography-22 [class*="text-[20px]"] {
   font-size: 26px !important;
   line-height: 1.4 !important;
 }
 
-.text-2xl,
-[class*="text-2xl"] {
+.portal-typography-22 .text-2xl,
+.portal-typography-22 [class*="text-2xl"] {
   font-size: 29px !important;
   line-height: 1.35 !important;
 }
 
-.text-3xl,
-[class*="text-3xl"] {
+.portal-typography-22 .text-3xl,
+.portal-typography-22 [class*="text-3xl"] {
   font-size: 34px !important;
   line-height: 1.3 !important;
 }
 
-/* Standardize buttons and inputs to be comfortable and easily readable */
-input, textarea, select {
+.portal-typography-22 input,
+.portal-typography-22 textarea,
+.portal-typography-22 select {
   font-size: 20px !important;
 }
 

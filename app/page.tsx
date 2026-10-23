@@ -167,7 +167,7 @@ function ChatOrderTracker({ orderId, theme }: { orderId: string; theme: 'light' 
         </div>
         <div className="flex justify-between">
           <span className="font-semibold text-zinc-500">Order ID:</span>
-          <span className="font-mono text-indigo-650 dark:text-indigo-400 font-semibold">{displayOrder.order_id}</span>
+          <span className="font-mono text-indigo-600 dark:text-indigo-400 font-semibold">{displayOrder.order_id}</span>
         </div>
         <div className="flex justify-between items-center">
           <span className="font-semibold text-zinc-500 flex-shrink-0">Details ID:</span>
@@ -802,9 +802,20 @@ export default function Home() {
     }
   }, [activeSalesSessionId]);
 
-  // Save theme selection to localStorage
+  // Save theme selection to localStorage and synchronize document root class & color scheme
   useEffect(() => {
     localStorage.setItem('shopease_theme', theme);
+    if (typeof document !== 'undefined') {
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+        document.documentElement.style.colorScheme = 'dark';
+      } else {
+        document.documentElement.classList.add('light');
+        document.documentElement.classList.remove('dark');
+        document.documentElement.style.colorScheme = 'light';
+      }
+    }
   }, [theme]);
 
   const toggleTheme = () => {
@@ -1522,29 +1533,30 @@ export default function Home() {
 
         let newOrderId = ordMatch ? ordMatch[0].toUpperCase() : '';
         if (isOrderPlacedMsg) {
-          if (!newOrderId) {
-            newOrderId = `ORD-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+          if (!newOrderId && typeof data?.order_id === 'string' && data.order_id) {
+            newOrderId = data.order_id.toUpperCase();
+          }
+          if (newOrderId && !botMessageContent.includes(newOrderId)) {
             botMessageContent += `\n\nOrder ID: **${newOrderId}**`;
           }
+          
           const titleMatch = botMessageContent.match(/order for (?:the )?([^!\.,\n]+)/i);
-          const productName = titleMatch ? titleMatch[1].trim() : 'Purchased Item';
+          const productName = (typeof data?.product_name === 'string' && data.product_name)
+            ? data.product_name
+            : (titleMatch ? titleMatch[1].trim() : 'Purchased Item');
           
           const priceMatch = botMessageContent.match(/₹\s*([\d,]+)/);
-          const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : 18999;
+          const price = typeof data?.price === 'number'
+            ? data.price
+            : (priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : 18999);
 
-          setPlacedOrderId(newOrderId);
-          setPlacedOrderDetailsId(Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join(''));
-          setIsOrderConfirmed(true);
-          setIsChatOpen(false); // Close chat drawer so confirmation modal is front & center
-          setBuyProduct({
-            id: 'chat-order-' + newOrderId,
-            name: productName,
-            price: price,
-            category: 'Electronics',
-            image_url: 'https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?auto=format&fit=crop&w=600&q=80',
-            description: 'Order placed directly via ShopEase Sales Assistant',
-            specs: { Status: 'Order Confirmed', Source: 'Sales Assistant Chat' }
-          });
+          if (newOrderId) {
+            setPlacedOrderId(newOrderId);
+            setPlacedOrderDetailsId(newOrderId);
+          }
+          if (currentUser) {
+            fetchUserOrders(currentUser.id.toString(), currentUser.username);
+          }
         }
 
         const botMessage: Message = {
@@ -2276,7 +2288,7 @@ export default function Home() {
         {showScrollButton && (
           <button
             onClick={() => scrollToBottom()}
-            className={`absolute bottom-24 right-6 p-2.5 rounded-full border shadow-lg transition-all hover:scale-105 active:scale-95 animate-bounce z-20 flex items-center justify-center cursor-pointer ${theme === 'dark' ? 'bg-zinc-800 border-zinc-700 text-indigo-400 hover:text-indigo-305' : 'bg-white border-zinc-200 text-indigo-650 hover:text-indigo-800'}`}
+            className={`absolute bottom-24 right-6 p-2.5 rounded-full border shadow-lg transition-all hover:scale-105 active:scale-95 animate-bounce z-20 flex items-center justify-center cursor-pointer ${theme === 'dark' ? 'bg-zinc-800 border-zinc-700 text-indigo-400 hover:text-indigo-305' : 'bg-white border-zinc-200 text-indigo-600 hover:text-indigo-800'}`}
           >
             <ArrowDown className="w-4.5 h-4.5" />
           </button>
@@ -2350,7 +2362,7 @@ export default function Home() {
               </button>
             </form>
             <p className={`text-[9px] mt-2 text-center flex items-center justify-between px-1 ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
-              <span className="flex items-center gap-0.5 text-indigo-650 font-medium">
+              <span className="flex items-center gap-0.5 text-indigo-600 font-medium">
                 <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" /> SSL Shield Active
               </span>
               <span>{inputValue.length} / 1000 characters</span>
@@ -2540,7 +2552,7 @@ export default function Home() {
   if (!mounted) {
     return (
       <div className={`min-h-screen w-full flex items-center justify-center transition-colors duration-300 ${theme === 'dark' ? 'bg-zinc-950 text-zinc-400' : 'bg-zinc-50 text-zinc-500'}`}>
-        <RefreshCw className="w-6 h-6 animate-spin text-indigo-650" />
+        <RefreshCw className="w-6 h-6 animate-spin text-indigo-600" />
       </div>
     );
   }
@@ -2605,8 +2617,8 @@ export default function Home() {
               }}
               className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                 activeView === 'shop'
-                  ? 'bg-indigo-650 text-white shadow-sm'
-                  : 'text-zinc-650 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
               }`}
             >
               Shop
@@ -2623,8 +2635,8 @@ export default function Home() {
               }}
               className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                 activeView === 'chat'
-                  ? 'bg-indigo-650 text-white shadow-sm'
-                  : 'text-zinc-650 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
               }`}
             >
               Support Chat
@@ -2642,12 +2654,36 @@ export default function Home() {
               className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
                 activeView === 'voice-support'
                   ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-sm'
-                  : 'text-zinc-650 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                  : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
               }`}
             >
               🎤 Voice Support
             </button>
           </div>
+
+          {/* Proper Dark / Light Mode Switcher */}
+          <button
+            id="header-theme-toggle"
+            onClick={toggleTheme}
+            className={`p-2 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 border text-xs font-semibold ${
+              theme === 'dark'
+                ? 'bg-zinc-900 border-zinc-800 hover:bg-zinc-850 text-amber-300 shadow-xs'
+                : 'bg-zinc-100 border-zinc-200 hover:bg-zinc-200/80 text-zinc-700 shadow-xs'
+            }`}
+            title={theme === 'dark' ? "Switch to Light Mode" : "Switch to Dark Mode"}
+          >
+            {theme === 'dark' ? (
+              <>
+                <Sun className="w-4 h-4 text-amber-400" />
+                <span className="hidden md:inline text-[11px] font-bold">Light</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-4 h-4 text-indigo-600" />
+                <span className="hidden md:inline text-[11px] font-bold">Dark</span>
+              </>
+            )}
+          </button>
 
           <div className="relative p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300">
             <ShoppingBag className="w-4.5 h-4.5" />
@@ -2720,7 +2756,7 @@ export default function Home() {
                 setAuthError(null);
                 setIsAuthModalOpen(true);
               }}
-              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold cursor-pointer transition-all shadow-md shadow-indigo-650/15 active:scale-[0.98] whitespace-nowrap ml-1.5"
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold cursor-pointer transition-all shadow-md shadow-indigo-600/15 active:scale-[0.98] whitespace-nowrap ml-1.5"
             >
               Sign In
             </button>
@@ -2728,9 +2764,9 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Category Sub-header Navigation Bar */}
+      {/* Category Sub-header Navigation Bar - Full Width Fluid Container */}
       {activeView === 'shop' && (
-        <nav className={`relative px-6 py-2 border-b flex items-center gap-4.5 select-none transition-colors duration-300 z-30 ${
+        <nav className={`relative px-4 sm:px-6 lg:px-10 xl:px-12 py-2 border-b flex items-center gap-4.5 select-none transition-colors duration-300 z-30 ${
           theme === 'dark' ? 'bg-zinc-900 border-zinc-800 text-zinc-100' : 'bg-white border-zinc-200 text-zinc-800'
         }`}>
           {navItems.map((item) => {
@@ -2939,7 +2975,7 @@ export default function Home() {
                             className={`
                               group flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer
                               ${isActive 
-                                ? (theme === 'dark' ? 'bg-indigo-650/15 text-white border-l-2 border-indigo-500' : 'bg-indigo-105 text-indigo-950 border-l-2 border-indigo-600') 
+                                ? (theme === 'dark' ? 'bg-indigo-600/20 text-white border-l-2 border-indigo-500' : 'bg-indigo-50 text-indigo-950 border-l-2 border-indigo-600') 
                                 : (theme === 'dark' ? 'text-zinc-400 hover:bg-zinc-900 hover:text-white' : 'text-zinc-600 hover:bg-zinc-200 hover:text-zinc-900')
                               }
                             `}
@@ -3548,8 +3584,8 @@ export default function Home() {
             )}
           </div>
         ) : activeView === 'shop' ? (
-          // Storefront Products Catalog Grid View
-          <section className="flex-1 max-w-7xl w-full mx-auto px-6 py-8 overflow-y-auto">
+          // Storefront Products Catalog Grid View - Full Page Width
+          <section className="flex-1 w-full mx-auto px-4 sm:px-6 lg:px-10 xl:px-12 py-8 overflow-y-auto">
             {/* Featured Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-4 mb-8 dark:border-zinc-800 border-zinc-200">
               <div>
@@ -3650,10 +3686,10 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Flat Products Grid */}
+            {/* Flat Products Grid - Full Width Responsive Columns */}
             {filteredProducts.length > 0 ? (
-              <div className="pb-16">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+              <div className="pb-16 w-full">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
                   {filteredProducts.slice(0, visibleCount).map((product) => (
                     <div 
                       key={product.id}
@@ -3689,7 +3725,7 @@ export default function Home() {
                             <h4 className={`text-xs font-bold leading-snug line-clamp-2 ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`} title={product.name}>
                               {product.name}
                             </h4>
-                            <span className={`text-xs font-bold whitespace-nowrap text-indigo-650 dark:text-indigo-400`}>
+                            <span className={`text-xs font-bold whitespace-nowrap text-indigo-600 dark:text-indigo-400`}>
                               ₹{product.price.toLocaleString('en-IN')}
                             </span>
                           </div>
@@ -3739,7 +3775,7 @@ export default function Home() {
                           </button>
                           <button
                             onClick={(e) => handleBuyNow(product, e)}
-                            className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition-all active:scale-[0.98] cursor-pointer shadow-md shadow-indigo-650/10"
+                            className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition-all active:scale-[0.98] cursor-pointer shadow-md shadow-indigo-600/10"
                           >
                             Buy Now
                           </button>
@@ -4023,7 +4059,7 @@ export default function Home() {
                         )}
                         <button
                           type="submit"
-                          className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs cursor-pointer shadow-md shadow-indigo-650/10 active:scale-[0.98] transition-all"
+                          className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg text-xs cursor-pointer shadow-md shadow-indigo-600/10 active:scale-[0.98] transition-all"
                         >
                           {editingAddressId ? 'Save Changes' : 'Add Address'}
                         </button>
@@ -4130,7 +4166,7 @@ export default function Home() {
                 }}
                 className={`flex-1 pb-3 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
                   authTab === 'signin'
-                    ? 'border-indigo-650 text-indigo-650 dark:text-indigo-400'
+                    ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
                     : 'border-transparent text-zinc-450 hover:text-zinc-500'
                 }`}
               >
@@ -4146,7 +4182,7 @@ export default function Home() {
                 }}
                 className={`flex-1 pb-3 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
                   authTab === 'signup'
-                    ? 'border-indigo-650 text-indigo-650 dark:text-indigo-400'
+                    ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
                     : 'border-transparent text-zinc-450 hover:text-zinc-500'
                 }`}
               >
@@ -4268,7 +4304,7 @@ export default function Home() {
                   </div>
                   <div>
                     <h4 className="text-xs font-bold leading-normal line-clamp-1">{buyProduct.name}</h4>
-                    <span className="text-xs font-bold text-indigo-650 dark:text-indigo-400 mt-1 block">
+                    <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 mt-1 block">
                       ₹{buyProduct.price.toLocaleString('en-IN')}
                     </span>
                   </div>
@@ -4498,7 +4534,7 @@ export default function Home() {
                   executeResetSession();
                   setResetConfirmOpen(false);
                 }}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition-all active:scale-[0.98] cursor-pointer shadow-md shadow-indigo-650/15"
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium transition-all active:scale-[0.98] cursor-pointer shadow-md shadow-indigo-600/15"
               >
                 Reset
               </button>
