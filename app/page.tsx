@@ -202,8 +202,15 @@ export default function Home() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
-  const [inputValue, setInputValue] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  // Independent state for Customer Support Chat vs Personal Sales Agent Drawer
+  const [supportInputValue, setSupportInputValue] = useState('');
+  const [salesInputValue, setSalesInputValue] = useState('');
+  const [isSupportLoading, setIsSupportLoading] = useState(false);
+  const [isSalesLoading, setIsSalesLoading] = useState(false);
+  const inputValue = supportInputValue;
+  const setInputValue = setSupportInputValue;
+  const isLoading = isSupportLoading;
+  const setIsLoading = setIsSupportLoading;
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
@@ -386,7 +393,9 @@ export default function Home() {
   const [drawerWidth, setDrawerWidth] = useState(520); // Resizable drawer width in pixels
   const [isResizingDrawer, setIsResizingDrawer] = useState(false);
   const [productSearchQuery, setProductSearchQuery] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null); // Ref to focus drawer chat input
+  const supportInputRef = useRef<HTMLInputElement>(null); // Ref for support chat input
+  const salesInputRef = useRef<HTMLInputElement>(null); // Ref for sales drawer chat input
+  const inputRef = salesInputRef; // Default alias
 
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedNavTab, setSelectedNavTab] = useState('All');
@@ -898,7 +907,12 @@ export default function Home() {
           }
           const transcript = parts.join(' ').trim();
           const base = initialInputRef.current.trim();
-          setInputValue(base ? `${base} ${transcript}` : transcript);
+          const finalVal = base ? `${base} ${transcript}` : transcript;
+          if (speechTargetDrawerRef.current) {
+            setSalesInputValue(finalVal);
+          } else {
+            setSupportInputValue(finalVal);
+          }
         };
         recognitionRef.current = rec;
       }
@@ -906,16 +920,19 @@ export default function Home() {
     return () => { if (recognitionRef.current) { recognitionRef.current.abort(); } };
   }, []);
 
-  const handleMicClick = () => {
+  const speechTargetDrawerRef = useRef<boolean>(false);
+
+  const handleMicClick = (isDrawer = false) => {
     if (!recognitionRef.current) {
       alert('Voice typing is not supported in this browser. Please try Google Chrome or Microsoft Edge.');
       return;
     }
+    speechTargetDrawerRef.current = isDrawer;
     if (isListening) {
       recognitionRef.current.stop();
     } else {
       try {
-        initialInputRef.current = inputValue;
+        initialInputRef.current = isDrawer ? salesInputValue : supportInputValue;
         recognitionRef.current.start();
       } catch (err) {
         console.error('Failed to start speech recognition:', err);
@@ -1457,8 +1474,8 @@ export default function Home() {
   };
 
   const handleSendMessage = async (text: string, isDrawerMode = false) => {
-
-    if (!text.trim() || isLoading) return;
+    const currentLoading = isDrawerMode ? isSalesLoading : isSupportLoading;
+    if (!text.trim() || currentLoading) return;
 
     if (isDrawerMode) {
       // --- SALES ASSISTANT CONVERSATION (DRAWER OVERLAY) ---
@@ -1488,8 +1505,8 @@ export default function Home() {
         return s;
       }));
 
-      setInputValue('');
-      setIsLoading(true);
+      setSalesInputValue('');
+      setIsSalesLoading(true);
 
       try {
         const res = await fetch('/api/order', {
@@ -1595,7 +1612,7 @@ export default function Home() {
           return s;
         }));
       } finally {
-        setIsLoading(false);
+        setIsSalesLoading(false);
       }
 
     } else {
@@ -1626,8 +1643,8 @@ export default function Home() {
         return s;
       }));
 
-      setInputValue('');
-      setIsLoading(true);
+      setSupportInputValue('');
+      setIsSupportLoading(true);
 
       try {
         const orderMatch = text.match(/ORD-[A-Z0-9]{8}/i) || text.match(/\b\d{5,}\b/);
@@ -1724,7 +1741,7 @@ export default function Home() {
           return s;
         }));
       } finally {
-        setIsLoading(false);
+        setIsSupportLoading(false);
       }
     }
   };
@@ -1944,16 +1961,17 @@ export default function Home() {
     e.stopPropagation();
     setActiveView('chat');
     setIsChatOpen(false);
-    setInputValue(`Tell me more about the ${productName} please.`);
+    setSupportInputValue(`Tell me more about the ${productName} please.`);
     setToastMessage('Redirected to Chat Assistant!');
+    setTimeout(() => supportInputRef.current?.focus(), 100);
   };
 
   const handleBuyViaChat = (productName: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setIsChatOpen(true);
-    setInputValue(`I want to buy the ${productName}`);
+    setSalesInputValue(`I want to buy the ${productName}`);
     setToastMessage(`Opened Sales Assistant for "${productName}"!`);
-    setTimeout(() => inputRef.current?.focus(), 100);
+    setTimeout(() => salesInputRef.current?.focus(), 100);
   };
 
   // Storefront Filtering Logic
@@ -2025,9 +2043,14 @@ export default function Home() {
     const hasOrderInSession = messages.some(m => /ORD-[A-Z0-9]{8}/i.test(m.content));
     const lastUserMessage = [...messages].reverse().find(m => m.role === 'user');
 
+    const currentInputValue = isDrawerMode ? salesInputValue : supportInputValue;
+    const setCurrentInputValue = isDrawerMode ? setSalesInputValue : setSupportInputValue;
+    const currentIsLoading = isDrawerMode ? isSalesLoading : isSupportLoading;
+    const currentInputRef = isDrawerMode ? salesInputRef : supportInputRef;
+
     const handleFormSubmit = (e: React.FormEvent) => {
       e.preventDefault();
-      handleSendMessage(inputValue, isDrawerMode);
+      handleSendMessage(currentInputValue, isDrawerMode);
     };
 
     return (
@@ -2264,7 +2287,7 @@ export default function Home() {
           })}
 
           {/* Loading Indicator */}
-          {isLoading && (
+          {currentIsLoading && (
             <div className="flex gap-3 max-w-[75%] mr-auto animate-fadeIn">
               <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 border ${theme === 'dark' ? 'bg-zinc-800 border-zinc-705 text-zinc-400' : 'bg-zinc-100 border-zinc-200 text-zinc-600'}`}>
                 <Bot className="w-4 h-4" />
@@ -2275,7 +2298,9 @@ export default function Home() {
                   <span className={`w-1.5 h-1.5 rounded-full animate-bounce ${theme === 'dark' ? 'bg-zinc-500' : 'bg-zinc-400'}`} style={{ animationDelay: '150ms' }}></span>
                   <span className={`w-1.5 h-1.5 rounded-full animate-bounce ${theme === 'dark' ? 'bg-zinc-500' : 'bg-zinc-400'}`} style={{ animationDelay: '300ms' }}></span>
                 </div>
-                <span className={`text-[9px] px-1 ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>Sales Assistant is typing...</span>
+                <span className={`text-[9px] px-1 ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
+                  {isDrawerMode ? 'Sales Assistant is typing...' : 'Support Assistant is typing...'}
+                </span>
               </div>
             </div>
           )}
@@ -2298,7 +2323,7 @@ export default function Home() {
         <footer className={`border-t px-4 py-4 md:px-6 flex-shrink-0 transition-colors duration-300 ${theme === 'dark' ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-zinc-200'}`}>
           <div className="max-w-4xl mx-auto w-full">
             {/* Top 5 Recent Orders Quick Selector in Support Chat (disappears once an order is selected or passed) */}
-            {!isDrawerMode && currentUser && userOrders.length > 0 && !hasOrderInSession && !/ORD-[A-Z0-9]{8}/i.test(inputValue) && (
+            {!isDrawerMode && currentUser && userOrders.length > 0 && !hasOrderInSession && !/ORD-[A-Z0-9]{8}/i.test(currentInputValue) && (
               <div className="mb-2.5 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none transition-all">
                 <span className={`text-[10px] font-bold uppercase tracking-wider flex-shrink-0 flex items-center gap-1 ${theme === 'dark' ? 'text-zinc-500' : 'text-zinc-400'}`}>
                   📦 Orders:
@@ -2308,8 +2333,8 @@ export default function Home() {
                     key={ord.order_id || ord._id}
                     type="button"
                     onClick={() => {
-                      setInputValue(`${ord.order_id} `);
-                      inputRef.current?.focus();
+                      setCurrentInputValue(`${ord.order_id} `);
+                      currentInputRef.current?.focus();
                     }}
                     className={`flex-shrink-0 text-[11px] font-medium px-2.5 py-1 rounded-lg border transition-all cursor-pointer flex items-center gap-1.5 active:scale-95 ${
                       theme === 'dark'
@@ -2327,24 +2352,24 @@ export default function Home() {
             )}
             <form onSubmit={handleFormSubmit} className="flex gap-2">
               <input
-                ref={inputRef}
-                id="support-chat-input"
+                ref={currentInputRef}
+                id={isDrawerMode ? "sales-chat-input" : "support-chat-input"}
                 type="text"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
+                value={currentInputValue}
+                onChange={(e) => setCurrentInputValue(e.target.value)}
                 maxLength={1000}
-                placeholder={isLoading ? "Please wait..." : isDrawerMode ? "Ask your Sales Assistant anything..." : "Ask ShopEase support anything..."}
-                disabled={isLoading}
+                placeholder={currentIsLoading ? "Please wait..." : isDrawerMode ? "Ask your Sales Assistant anything..." : "Ask ShopEase support anything..."}
+                disabled={currentIsLoading}
                 className={`flex-1 focus:ring-1 text-sm transition-all focus:outline-none disabled:opacity-60 rounded-xl px-4 py-3 ${theme === 'dark' ? 'bg-zinc-950 border-zinc-800 focus:border-indigo-600 focus:ring-indigo-600 text-white placeholder-zinc-550' : 'bg-zinc-50 border-zinc-200 focus:border-indigo-600 focus:ring-indigo-600 text-zinc-900 placeholder-zinc-400'}`}
               />
 
               <button
                 type="button"
-                onClick={handleMicClick}
-                disabled={isLoading}
+                onClick={() => handleMicClick(isDrawerMode)}
+                disabled={currentIsLoading}
                 className={`px-3.5 rounded-xl border transition-all flex items-center justify-center cursor-pointer active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed
                   ${isListening 
-                    ? 'bg-red-650 hover:bg-red-500 text-white border-red-500 animate-pulse' 
+                    ? 'bg-red-600 hover:bg-red-500 text-white border-red-500 animate-pulse' 
                     : (theme === 'dark' ? 'bg-zinc-800 hover:bg-zinc-750 text-zinc-300 border-zinc-700' : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-650 border-zinc-200')
                   }
                 `}
@@ -2355,7 +2380,7 @@ export default function Home() {
 
               <button
                 type="submit"
-                disabled={!inputValue.trim() || isLoading}
+                disabled={!currentInputValue.trim() || currentIsLoading}
                 className={`px-4.5 rounded-xl transition-all duration-205 flex items-center justify-center shadow-md active:scale-[0.98] disabled:cursor-not-allowed disabled:shadow-none cursor-pointer ${theme === 'dark' ? 'bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 text-white disabled:text-zinc-500' : 'bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-100 text-white disabled:text-zinc-400'}`}
               >
                 <Send className="w-4 h-4" />
@@ -2365,7 +2390,7 @@ export default function Home() {
               <span className="flex items-center gap-0.5 text-indigo-600 font-medium">
                 <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" /> SSL Shield Active
               </span>
-              <span>{inputValue.length} / 1000 characters</span>
+              <span>{currentInputValue.length} / 1000 characters</span>
             </p>
           </div>
         </footer>
