@@ -106,6 +106,7 @@ export async function POST(request: Request) {
       updateFields.status = 'Placed';
       updateFields.resumed_at = new Date();
       updateFields.resumed_by_region = region;
+      updateFields.admin_note = '';
       message = `Order ${order_id} has been resumed.`;
     } else if (action === 'hold') {
       targetStatus = 'On Hold';
