@@ -3,7 +3,7 @@ import { MongoClient } from 'mongodb';
 import productsData from '../../data/products.json';
 import { getHfOrderUrl, hfPost } from '../../lib/hf-api';
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://omthakur:sxB1fxPqt50ddAT5@cluster0.lv5os6g.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+const MONGO_URI = process.env.MONGO_URI || '';
 
 // Helper to search and match products by query keywords
 function findMatchingProducts(query: string): any[] {
@@ -136,6 +136,46 @@ export async function POST(request: Request) {
         }
         hfSuccess = true;
         console.log('Placed order directly via FastAPI endpoint /order');
+
+        // Self-healing: if the backend returned a stale pending approval for a different product and the user is NOT confirming, auto-cancel and re-fetch the user query
+        const resText = typeof hfData?.res === 'string' ? hfData.res : '';
+        const isStaleConfirmation = resText.includes('Please confirm if you would like to place the order for') && !isConfirm;
+
+        if (isStaleConfirmation) {
+          console.log('Detected stale confirmation state on thread. Cancelling and re-running user query...');
+          // Auto-cancel the stale pending state on this thread
+          await hfPost(
+            orderUrl,
+            {
+              chat: 'cancel',
+              thread_id,
+              user_id: resolvedUserId,
+              username: resolvedUsername,
+            },
+            userAuthHeader
+          );
+
+          // Now re-run the user's actual question on a clean sub-thread
+          const freshThreadId = `${thread_id}_${Date.now()}`;
+          const retryResponse = await hfPost(
+            orderUrl,
+            {
+              chat,
+              thread_id: freshThreadId,
+              user_id: resolvedUserId,
+              username: resolvedUsername,
+            },
+            userAuthHeader
+          );
+
+          if (retryResponse.ok) {
+            try {
+              hfData = await retryResponse.json();
+            } catch {
+              // keep fallback
+            }
+          }
+        }
       } else {
         const errorBody = await response.text().catch(() => '');
         console.warn('HF Order API returned status', response.status, errorBody.slice(0, 200));

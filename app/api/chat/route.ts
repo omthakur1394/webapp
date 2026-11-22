@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { MongoClient } from 'mongodb';
 import { getHfChatUrl, hfPost } from '../../lib/hf-api';
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://omthakur:sxB1fxPqt50ddAT5@cluster0.lv5os6g.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+const MONGO_URI = process.env.MONGO_URI || '';
 
 export async function POST(request: Request) {
   try {

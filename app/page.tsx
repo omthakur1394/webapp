@@ -35,8 +35,10 @@ import {
   Phone,
   PhoneOff,
   RotateCcw,
-  FileText
+  FileText,
+  CreditCard
 } from 'lucide-react';
+import { startRazorpayPayment } from './lib/razorpay';
 import ReactMarkdown from 'react-markdown';
 import productsData from './data/products.json';
 
@@ -212,6 +214,7 @@ export default function Home() {
   const isLoading = isSupportLoading;
   const setIsLoading = setIsSupportLoading;
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [handledPromptIds, setHandledPromptIds] = useState<Record<string, 'approved' | 'rejected'>>({});
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
   // Custom modals confirmation states for Chat
@@ -1482,10 +1485,38 @@ export default function Home() {
       const currentSessionId = activeSalesSessionId;
       if (!currentSessionId) return;
 
+      const activeSession = salesSessions.find(s => s.id === currentSessionId);
+      const lastBotMsg = activeSession?.messages.slice().reverse().find(m => m.role === 'assistant');
+      const isPendingApproval = Boolean(
+        lastBotMsg && (
+          lastBotMsg.content.includes('⚠️') ||
+          lastBotMsg.content.toLowerCase().includes('confirm if you would like to place') ||
+          lastBotMsg.content.toLowerCase().includes('confirm and place your order') ||
+          (lastBotMsg.content.toLowerCase().includes('confirm') && (lastBotMsg.content.toLowerCase().includes('order for') || lastBotMsg.content.toLowerCase().includes('place the order')))
+        )
+      );
+
+      const textLower = text.trim().toLowerCase();
+      if (isPendingApproval && (textLower === 'approve' || textLower === 'approved' || textLower === 'yes' || textLower === 'confirm')) {
+        if (lastBotMsg?.id) setHandledPromptIds(prev => ({ ...prev, [lastBotMsg.id]: 'approved' }));
+        const prodMatch = lastBotMsg!.content.match(/order for (?:the )?\*\*?([^*?]+?)\*\*?(?: for ₹?([\d,]+))?/i);
+        const pName = prodMatch ? prodMatch[1].trim() : 'Requested Product';
+        const pPrice = prodMatch && prodMatch[2] ? parseInt(prodMatch[2].replace(/,/g, ''), 10) : 1799;
+        setSalesInputValue('');
+        triggerChatRazorpayPayment(pName, pPrice, true, currentSessionId);
+        return;
+      }
+
+      let messageToSend = text;
+      if (isPendingApproval && (textLower === 'reject' || textLower === 'rejected')) {
+        if (lastBotMsg?.id) setHandledPromptIds(prev => ({ ...prev, [lastBotMsg.id]: 'rejected' }));
+        messageToSend = 'cancel';
+      }
+
       const userMessage: Message = {
         id: crypto.randomUUID(),
         role: 'user',
-        content: text,
+        content: messageToSend,
         timestamp: new Date()
       };
 
@@ -1515,7 +1546,7 @@ export default function Home() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            chat: text,
+            chat: messageToSend,
             thread_id: currentSessionId,
             username: currentUser?.username || '',
             user_id: currentUser?.id?.toString() || currentUser?.username || '',
@@ -1756,11 +1787,14 @@ export default function Home() {
   };
 
   const executeResetSession = () => {
+    const newSessionId = crypto.randomUUID();
     if (isChatOpen) {
+      setActiveSalesSessionId(newSessionId);
       setSalesSessions(prev => prev.map(s => {
         if (s.id === activeSalesSessionId) {
           return {
             ...s,
+            id: newSessionId,
             title: 'Sales Recommendations',
             messages: [
               {
@@ -1776,10 +1810,12 @@ export default function Home() {
         return s;
       }));
     } else {
+      setActiveSupportSessionId(newSessionId);
       setSupportSessions(prev => prev.map(s => {
         if (s.id === activeSupportSessionId) {
           return {
             ...s,
+            id: newSessionId,
             title: 'Welcome Support Chat',
             messages: [
               {
@@ -1908,53 +1944,134 @@ export default function Home() {
     if (!shippingAddress.trim() || !buyProduct) return;
     if (!currentUser) {
       setToastMessage('You must be logged in to place an order.');
+      setIsAuthModalOpen(true);
       return;
     }
     setIsOrderPlacing(true);
     try {
-      const res = await fetch('/api/order', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const initiated = await startRazorpayPayment({
+        amount: buyProduct.price,
+        productName: buyProduct.name,
+        userName: currentUser.username,
+        userEmail: currentUser.email || `${currentUser.username}@shopease.com`,
+        onSuccess: async (rzpRes) => {
+          try {
+            const verifyRes = await fetch('/api/razorpay/verify-payment', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_order_id: rzpRes.razorpay_order_id,
+                razorpay_payment_id: rzpRes.razorpay_payment_id,
+                razorpay_signature: rzpRes.razorpay_signature,
+                product_name: buyProduct.name,
+                price: buyProduct.price,
+                user_id: currentUser.id.toString(),
+                username: currentUser.username,
+                shipping_address: shippingAddress,
+                hub_region: selectedHub || 'General Hub',
+              }),
+            });
+            const data = await verifyRes.json();
+            const confirmedOrdId = data.order_id || 'ORD-PAID';
+            setPlacedOrderId(confirmedOrdId);
+            setPlacedOrderDetailsId(data.payment_id || data._id || 'PAYMENT-VERIFIED');
+            setIsOrderConfirmed(true);
+            setCartCount(prev => prev + 1);
+            setToastMessage(`Payment of ₹${buyProduct.price.toLocaleString('en-IN')} verified! Order ${confirmedOrdId} placed.`);
+            if (currentUser) {
+              fetchUserOrders(currentUser.id.toString(), currentUser.username);
+            }
+          } catch (verifyErr) {
+            console.error('Payment verification failed:', verifyErr);
+            setToastMessage('Payment completed! Order recorded.');
+            setIsOrderConfirmed(true);
+          } finally {
+            setIsOrderPlacing(false);
+          }
         },
-        body: JSON.stringify({
-          user_id: currentUser.id.toString(),
-          product_name: buyProduct.name,
-          price: buyProduct.price,
-          username: currentUser.username,
-          shipping_address: shippingAddress,
-          hub_region: selectedHub || 'General Hub'
-        }),
+        onFailure: (err) => {
+          console.warn('Razorpay payment cancelled:', err);
+          setIsOrderPlacing(false);
+          setToastMessage('Payment was cancelled.');
+        },
       });
 
-      if (!res.ok) {
-        throw new Error(`Order placement returned status ${res.status}`);
-      }
-
-      const data = await res.json();
-      setPlacedOrderId(data.order_id || 'ORD-UNKNOWN');
-      setPlacedOrderDetailsId(data._id || 'DETAILS-UNKNOWN');
-      setIsOrderConfirmed(true);
-      setCartCount(prev => prev + 1);
-      setToastMessage(`Order placed successfully for ${buyProduct.name}!`);
-      if (currentUser) {
-        fetchUserOrders(currentUser.id.toString(), currentUser.username);
+      if (!initiated) {
+        setIsOrderPlacing(false);
       }
     } catch (err: any) {
       console.error('Order placement API failed:', err);
-      setToastMessage('Order placed locally due to network issues.');
-      const mockOrderId = `ORD-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
-      const mockDetailsId = Array.from({ length: 24 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-      setPlacedOrderId(mockOrderId);
-      setPlacedOrderDetailsId(mockDetailsId);
-      setIsOrderConfirmed(true);
-      setCartCount(prev => prev + 1);
-      if (currentUser) {
-        fetchUserOrders(currentUser.id.toString(), currentUser.username);
-      }
-    } finally {
       setIsOrderPlacing(false);
     }
+  };
+
+  const triggerChatRazorpayPayment = async (productName: string, price: number, isDrawer = false, sessionId?: string) => {
+    if (!currentUser) {
+      setToastMessage('Please sign in to complete checkout.');
+      setIsAuthModalOpen(true);
+      return;
+    }
+    const targetAddress = savedAddresses[0]
+      ? `${savedAddresses[0].address_line}, ${savedAddresses[0].city} (${savedAddresses[0].postal_code})`
+      : '123 E-Commerce Way, Tech City';
+
+    const currentSessionId = sessionId || (isDrawer ? activeSalesSessionId : activeSupportSessionId);
+
+    setToastMessage(`Opening Razorpay Checkout for ₹${price.toLocaleString('en-IN')}...`);
+    await startRazorpayPayment({
+      amount: price,
+      productName,
+      userName: currentUser.username,
+      userEmail: currentUser.email || `${currentUser.username}@shopease.com`,
+      onSuccess: async (rzpRes) => {
+        try {
+          const verifyRes = await fetch('/api/razorpay/verify-payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              razorpay_order_id: rzpRes.razorpay_order_id,
+              razorpay_payment_id: rzpRes.razorpay_payment_id,
+              razorpay_signature: rzpRes.razorpay_signature,
+              product_name: productName,
+              price: price,
+              user_id: currentUser.id.toString(),
+              username: currentUser.username,
+              shipping_address: targetAddress,
+              hub_region: 'General Hub',
+            }),
+          });
+          const data = await verifyRes.json();
+          const ordId = data.order_id || 'ORD-PAID';
+          setPlacedOrderId(ordId);
+          setPlacedOrderDetailsId(data.payment_id || data._id || 'PAYMENT-VERIFIED');
+
+          const confirmMsg: Message = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: `**Order Placed & Paid via Razorpay!**\n\nYour payment for **${productName}** has been verified.\n\n- **Amount Paid**: ₹${price.toLocaleString('en-IN')}\n- **Order ID**: **${ordId}**\n- **Payment ID**: \`${rzpRes.razorpay_payment_id}\`\n- **Status**: Paid & Placed\n\nDelivery scheduled to: *${targetAddress}*`,
+            timestamp: new Date()
+          };
+          const setter = isDrawer ? setSalesSessions : setSupportSessions;
+          setter(prev => prev.map(s => {
+            if (s.id === currentSessionId) {
+              return { ...s, messages: [...s.messages, confirmMsg], updatedAt: new Date() };
+            }
+            return s;
+          }));
+
+          setCartCount(prev => prev + 1);
+          setToastMessage(`Payment of ₹${price.toLocaleString('en-IN')} successful! Order ${ordId} placed.`);
+          if (currentUser) {
+            fetchUserOrders(currentUser.id.toString(), currentUser.username);
+          }
+        } catch (vErr) {
+          console.error('Chat payment verification failed:', vErr);
+        }
+      },
+      onFailure: () => {
+        setToastMessage('Payment was cancelled.');
+      }
+    });
   };
 
   const handleAskAI = (productName: string, e: React.MouseEvent) => {
@@ -2033,7 +2150,7 @@ export default function Home() {
     { label: 'All category', value: 'All', isDropdown: true, icon: <Menu className="w-4 h-4 mr-1.5" /> },
     { label: 'Hot offers', value: 'Hot offers' },
     { label: 'Gift boxes', value: 'Gift boxes' },
-    { label: 'Customer Service', value: 'Customer Service' }
+    { label: 'Sales Agent', value: 'Sales Agent' }
   ];  // Helper to render standard Chat UI Window
   const renderChatWindow = (isDrawerMode = false) => {
     const currentSessions = isDrawerMode ? salesSessions : supportSessions;
@@ -2137,7 +2254,7 @@ export default function Home() {
           className={`flex-1 overflow-y-auto px-4 py-6 md:p-6 space-y-5 relative min-h-0 transition-colors duration-300 ${theme === 'dark' ? 'bg-zinc-950/40' : 'bg-zinc-55/30'}`}
         >
           <div className="max-w-4xl mx-auto w-full space-y-5">
-          {messages.map((message) => {
+          {messages.map((message, messageIdx) => {
             const isBot = message.role === 'assistant';
             
             // Extract order ID only for sales assistant order placements in drawer mode
@@ -2236,6 +2353,52 @@ export default function Home() {
                         {orderIdMatch && (
                           <ChatOrderTracker orderId={orderIdMatch} theme={theme} />
                         )}
+
+                        {/* Human Confirmation Actions (Approve / Reject) — Only for Sales Agent Checkout */}
+                        {(() => {
+                          if (!isDrawerMode) return null;
+                          if (handledPromptIds[message.id]) return null;
+                          if (messageIdx < messages.length - 1) return null;
+                          if (message.content.includes('has been Placed') || message.content.includes('has been placed') || message.content.includes('Order ID:')) {
+                            return null;
+                          }
+
+                          const isConfirmPrompt =
+                            message.content.includes('⚠️') ||
+                            message.content.toLowerCase().includes('confirm if you would like to place') ||
+                            message.content.toLowerCase().includes('confirm and place your order') ||
+                            (message.content.toLowerCase().includes('confirm') && message.content.toLowerCase().includes('place the order'));
+                          
+                          if (!isConfirmPrompt) return null;
+
+                          return (
+                            <div className="mt-3 pt-2.5 border-t border-zinc-200 dark:border-zinc-700/60 flex items-center gap-2.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setHandledPromptIds(prev => ({ ...prev, [message.id]: 'approved' }));
+                                  const prodMatch = message.content.match(/order for (?:the )?\*\*?([^*?]+?)\*\*?(?: for ₹?([\d,]+))?/i);
+                                  const pName = prodMatch ? prodMatch[1].trim() : 'Requested Product';
+                                  const pPrice = prodMatch && prodMatch[2] ? parseInt(prodMatch[2].replace(/,/g, ''), 10) : 1799;
+                                  triggerChatRazorpayPayment(pName, pPrice, isDrawerMode, currentActiveId);
+                                }}
+                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold shadow-sm cursor-pointer active:scale-95 transition-all"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setHandledPromptIds(prev => ({ ...prev, [message.id]: 'rejected' }));
+                                  handleSendMessage("cancel", isDrawerMode);
+                                }}
+                                className="px-4 py-2 bg-zinc-200 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-200 rounded-xl text-xs font-semibold cursor-pointer active:scale-95 transition-all"
+                              >
+                                Reject
+                              </button>
+                            </div>
+                          );
+                        })()}
                       </div>
                     ) : (
                       <p className="whitespace-pre-wrap text-[13.5px] sm:text-sm leading-relaxed">{message.content}</p>
@@ -2854,9 +3017,9 @@ export default function Home() {
                 key={item.label}
                 onClick={() => {
                   setSelectedNavTab(item.label);
-                  if (item.label === 'Customer Service') {
+                  if (item.label === 'Sales Agent' || item.label === 'Customer Service') {
                     setIsChatOpen(true);
-                    setToastMessage("Customer Service chat widget opened!");
+                    setToastMessage("Sales Agent chat widget opened!");
                     setTimeout(() => {
                       inputRef.current?.focus();
                     }, 150);
@@ -3116,9 +3279,6 @@ export default function Home() {
                       <h2 className={`text-2xl font-extrabold tracking-tight ${theme === 'dark' ? 'text-white' : 'text-zinc-900'}`}>
                         {supportLang === 'hi-IN' ? 'वॉइस सपोर्ट' : supportLang === 'mr-IN' ? 'व्हॉइस सपोर्ट' : 'Voice Support'}
                       </h2>
-                      <p className={`text-xs mt-1 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                        {supportLang === 'hi-IN' ? '100% हैंड्स-फ्री कॉल · कोई टाइपिंग नहीं' : supportLang === 'mr-IN' ? '100% हँड्स-फ्री कॉल · कोणतीही टायपिंग नाही' : '100% Hands-Free AI Call · Zero Typing'}
-                      </p>
                     </div>
                   </div>
 
@@ -3500,16 +3660,6 @@ export default function Home() {
                         </span>
                       )}
                     </h3>
-
-                    <p className={`text-xs mt-2 ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                      {isSarvamRecording
-                        ? (supportLang === 'hi-IN' ? 'हैंड्स-फ्री कॉल सक्रिय है। अपनी बात बोलें, 1.5 सेकंड रुकने पर यह अपने आप जवाब देगा।' : supportLang === 'mr-IN' ? 'हँड्स-फ्री कॉल सुरू आहे. बोला, 1.5 सेकंद थांबल्यावर आपोआप उत्तर येईल.' : 'Hands-free phone mode active. Speak freely — pauses are auto-detected.')
-                        : sarvamSpeakingId
-                        ? (supportLang === 'hi-IN' ? 'नया सवाल पूछने के लिए कभी भी बीच वाले बटन पर टैप करके रोक सकते हैं।' : supportLang === 'mr-IN' ? 'नवीन प्रश्न विचारण्यासाठी कधीही मधल्या बटणावर टॅप करून थांबवू शकता.' : 'Assistant is speaking. Tap the orb anytime to interrupt and ask a question.')
-                        : userMutedMicRef.current
-                        ? (supportLang === 'hi-IN' ? 'माइक बंद कर दिया गया है। जब भी बोलना चाहें, बीच वाले बटन पर टैप करें।' : supportLang === 'mr-IN' ? 'माइक बंद करण्यात आला आहे. जेव्हा बोलायचे असेल तेव्हा मधल्या बटणावर टॅप करा.' : 'Microphone is paused. Tap the orb or mic button whenever you are ready to talk.')
-                        : (supportLang === 'hi-IN' ? 'असली फोन सपोर्ट की तरह — बिना किसी बटन को दबाए सीधे बात करें।' : supportLang === 'mr-IN' ? 'खऱ्या फोन सपोर्टसारखे — कोणतेही बटण न दाबता थेट बोला.' : 'Just like a real phone call — talk freely without tapping any buttons.')}
-                    </p>
 
                     {/* Optional Captions Card */}
                     {showCaptions && (
@@ -4411,19 +4561,26 @@ export default function Home() {
                     id="confirm-checkout-btn"
                     type="submit"
                     disabled={isOrderPlacing}
-                    className={`w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-md active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                    className={`w-full py-3 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white rounded-xl text-xs font-bold shadow-md active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-2 ${
                       isOrderPlacing ? 'opacity-70 cursor-not-allowed' : ''
                     }`}
                   >
                     {isOrderPlacing ? (
                       <>
                         <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        Placing Order...
+                        Processing Razorpay Payment...
                       </>
                     ) : (
-                      'Confirm & Buy'
+                      <>
+                        <CreditCard className="w-4 h-4" />
+                        Pay with Razorpay • ₹{buyProduct.price.toLocaleString('en-IN')}
+                      </>
                     )}
                   </button>
+                  <div className="flex items-center justify-center gap-1.5 text-[10px] text-zinc-500 dark:text-zinc-400 mt-2">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>Secured by Razorpay • UPI, Cards, NetBanking, Wallets</span>
+                  </div>
                 </form>
               </>
             ) : (
@@ -4630,7 +4787,7 @@ export default function Home() {
                   <RefreshCw className="w-4 h-4 animate-spin text-indigo-500" />
                   <span>Loading your grievance responses from MongoDB...</span>
                 </div>
-              ) : userTickets.length === 0 && userGrievances.length === 0 ? (
+              ) : userTickets.length === 0 ? (
                 <div className={`text-center py-12 border border-dashed rounded-2xl p-6 ${
                   theme === 'dark' ? 'border-zinc-800 bg-zinc-900/40' : 'border-zinc-300 bg-zinc-50'
                 }`}>
@@ -4646,18 +4803,7 @@ export default function Home() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {[...userTickets, ...userGrievances.map(g => ({
-                    _id: g._id,
-                    order_id: g.order_id,
-                    message: g.admin_note ? `Order Grievance: ${g.admin_note}` : `Order status: ${g.status}`,
-                    status: g.status,
-                    escalation_level: g.status === 'Paused' ? 2 : 1,
-                    product_name: g.product_name,
-                    price: g.price,
-                    created_at: g.created_at,
-                    officer_response: g.admin_note || g.officer_response,
-                    last_handled_by: g.last_officer || g.last_handled_by
-                  }))].map((item, idx) => {
+                  {userTickets.map((item, idx) => {
                     const isResolved = item.status === 'Resolved' || item.status === 'Refunded';
 
                     return (

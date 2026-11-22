@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { MongoClient } from 'mongodb';
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://omthakur:sxB1fxPqt50ddAT5@cluster0.lv5os6g.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+const MONGO_URI = process.env.MONGO_URI || '';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -18,9 +18,8 @@ export async function GET(request: Request) {
     await client.connect();
     const db = client.db('shopease_db');
     const ticketsCollection = db.collection('tickets');
-    const ordersCollection = db.collection('orders');
 
-    // Query tickets by email, username, or thread_id
+    // Query tickets by email, username, or customer
     const userQuery: any[] = [];
     if (email) userQuery.push({ email: { $regex: new RegExp(email, 'i') } });
     if (username) userQuery.push({ username: { $regex: new RegExp(username, 'i') } }, { customer: { $regex: new RegExp(username, 'i') } });
@@ -29,26 +28,8 @@ export async function GET(request: Request) {
       $or: userQuery.length > 0 ? userQuery : [{ username }]
     }).sort({ created_at: -1 }).toArray();
 
-    // Query user orders with grievances / notes / paused status
-    const orderQuery: any[] = [];
-    if (email) orderQuery.push({ email });
-    if (username) orderQuery.push({ username });
-
-    const grievances = await ordersCollection.find({
-      $and: [
-        { $or: orderQuery.length > 0 ? orderQuery : [{ username }] },
-        {
-          $or: [
-            { status: 'Paused' },
-            { status: 'On Hold' },
-            { status: 'Refunded' },
-            { admin_note: { $exists: true, $ne: '' } }
-          ]
-        }
-      ]
-    }).sort({ created_at: -1 }).toArray();
-
-    return NextResponse.json({ tickets, grievances });
+    // Only return genuine tickets from the tickets collection
+    return NextResponse.json({ tickets, grievances: [] });
   } catch (error: any) {
     console.error('Error fetching user grievance tickets:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
