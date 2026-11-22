@@ -1954,6 +1954,9 @@ export default function Home() {
         productName: buyProduct.name,
         userName: currentUser.username,
         userEmail: currentUser.email || `${currentUser.username}@shopease.com`,
+        userId: currentUser.id.toString(),
+        shippingAddress: shippingAddress,
+        hubRegion: selectedHub || 'General Hub',
         onSuccess: async (rzpRes) => {
           try {
             const verifyRes = await fetch('/api/razorpay/verify-payment', {
@@ -2023,6 +2026,9 @@ export default function Home() {
       productName,
       userName: currentUser.username,
       userEmail: currentUser.email || `${currentUser.username}@shopease.com`,
+      userId: currentUser.id.toString(),
+      shippingAddress: targetAddress,
+      hubRegion: 'General Hub',
       onSuccess: async (rzpRes) => {
         try {
           const verifyRes = await fetch('/api/razorpay/verify-payment', {

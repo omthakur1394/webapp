@@ -22,6 +22,10 @@ export interface RazorpayCheckoutOptions {
   userEmail?: string;
   userName?: string;
   userContact?: string;
+  userId?: string;
+  shippingAddress?: string;
+  hubRegion?: string;
+  notes?: Record<string, string>;
   onSuccess: (response: {
     razorpay_payment_id: string;
     razorpay_order_id: string;
@@ -46,6 +50,11 @@ export async function startRazorpayPayment(options: RazorpayCheckoutOptions): Pr
         notes: {
           product_name: options.productName,
           customer_name: options.userName || 'Guest',
+          user_id: options.userId || '',
+          username: options.userName || '',
+          shipping_address: options.shippingAddress || '',
+          hub_region: options.hubRegion || 'General Hub',
+          ...(options.notes || {}),
         },
       }),
     });
