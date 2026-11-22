@@ -26,29 +26,13 @@ export async function GET(request: Request) {
           { escalation_level: null }
         ]
       };
-      orderQuery = {
-        $or: [
-          { status: 'On Hold' },
-          { escalation_level: 1 },
-          { admin_note: { $exists: true, $ne: '' }, escalation_level: { $exists: false } }
-        ]
-      };
+      orderQuery = { escalation_level: 1 };
     } else if (requestedLevel === 2) {
       ticketQuery = { escalation_level: 2 };
-      orderQuery = {
-        $or: [
-          { status: 'Paused' },
-          { escalation_level: 2 }
-        ]
-      };
+      orderQuery = { escalation_level: 2 };
     } else if (requestedLevel === 3) {
       ticketQuery = { escalation_level: 3 };
-      orderQuery = {
-        $or: [
-          { status: 'Security Hold' },
-          { escalation_level: 3 }
-        ]
-      };
+      orderQuery = { escalation_level: 3 };
     } else if (requestedLevel === 4) {
       ticketQuery = { escalation_level: 4 };
       orderQuery = { escalation_level: 4 };
@@ -132,7 +116,7 @@ export async function PUT(request: Request) {
         }
 
         if (officer_note) {
-          orderUpdate.admin_note = officer_note;
+          orderUpdate.officer_response = officer_note;
         }
 
         await ordersCollection.updateOne(

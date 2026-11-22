@@ -397,7 +397,7 @@ export default function GrievancePortalPage() {
                         product_name: o.product_name,
                         price: o.price,
                         created_at: o.created_at,
-                        officer_response: o.admin_note || o.officer_response,
+                        officer_response: o.officer_response,
                         last_handled_by: o.last_officer || o.last_handled_by
                       }))]
                       .map((tkt, idx) => {
