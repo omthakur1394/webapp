@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { MongoClient } from 'mongodb';
 
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || 'CFeHqLgj5jYCzflxKerDQxqT';
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '';
 const MONGO_URI = process.env.MONGO_URI || '';
 
 export async function POST(request: Request) {
@@ -47,6 +47,11 @@ export async function POST(request: Request) {
       const ordersCollection = db.collection('orders');
 
       const mockOrderId = `ORD-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+      const now = new Date();
+      const estDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const formattedEstDelivery = `${estDate.getDate()} ${months[estDate.getMonth()]} ${estDate.getFullYear()}`;
+
       const newOrder = {
         order_id: mockOrderId,
         user_id: user_id || 'Guest',
@@ -58,9 +63,11 @@ export async function POST(request: Request) {
         payment_method: 'Razorpay',
         razorpay_order_id,
         razorpay_payment_id,
-        shipping_address: shipping_address || '123 E-Commerce Way, Tech City',
         hub_region: hub_region || 'General Hub',
-        created_at: new Date(),
+        created_at: now,
+        estimated_delivery: formattedEstDelivery,
+        estimated_delivery_days: 7,
+        estimated_delivery_date: estDate,
       };
 
       const result = await ordersCollection.insertOne(newOrder);

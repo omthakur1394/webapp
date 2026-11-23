@@ -67,7 +67,7 @@ export async function startRazorpayPayment(options: RazorpayCheckoutOptions): Pr
     const orderData = await res.json();
 
     const rzpOptions = {
-      key: orderData.key_id || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_U3CGk80px6Xuqv',
+      key: orderData.key_id || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '',
       amount: orderData.amount,
       currency: orderData.currency || 'INR',
       name: 'ShopEase E-Commerce',

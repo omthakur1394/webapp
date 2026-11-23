@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || 'rzp_test_U3CGk80px6Xuqv';
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || 'CFeHqLgj5jYCzflxKerDQxqT';
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || '';
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '';
 
 export async function POST(request: Request) {
   try {

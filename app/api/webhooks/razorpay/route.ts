@@ -5,7 +5,7 @@ import { MongoClient } from 'mongodb';
 const RAZORPAY_WEBHOOK_SECRET =
   process.env.RAZORPAY_WEBHOOK_SECRET ||
   process.env.RAZORPAY_KEY_SECRET ||
-  'CFeHqLgj5jYCzflxKerDQxqT';
+  '';
 
 const MONGO_URI = process.env.MONGO_URI || '';
 
@@ -85,6 +85,11 @@ export async function POST(request: Request) {
         // Edge case: User's browser closed or dropped connection right after payment was captured!
         // Webhook safely reconstructs and saves the order.
         const generatedOrderId = notes.order_id || `ORD-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+        const now = new Date();
+        const estDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const formattedEstDelivery = `${estDate.getDate()} ${months[estDate.getMonth()]} ${estDate.getFullYear()}`;
+
         const newOrder = {
           order_id: generatedOrderId,
           user_id: String(notes.user_id || 'Guest'),
@@ -96,9 +101,11 @@ export async function POST(request: Request) {
           payment_method: 'Razorpay',
           razorpay_order_id: rzpOrderId,
           razorpay_payment_id: paymentId,
-          shipping_address: String(notes.shipping_address || '123 E-Commerce Way, Tech City'),
           hub_region: String(notes.hub_region || 'General Hub'),
-          created_at: new Date(),
+          created_at: now,
+          estimated_delivery: formattedEstDelivery,
+          estimated_delivery_days: 7,
+          estimated_delivery_date: estDate,
           source: 'webhook_fallback',
         };
 

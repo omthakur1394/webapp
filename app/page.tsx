@@ -36,7 +36,8 @@ import {
   PhoneOff,
   RotateCcw,
   FileText,
-  CreditCard
+  CreditCard,
+  Truck
 } from 'lucide-react';
 import { startRazorpayPayment } from './lib/razorpay';
 import ReactMarkdown from 'react-markdown';
@@ -2054,7 +2055,7 @@ export default function Home() {
           const confirmMsg: Message = {
             id: crypto.randomUUID(),
             role: 'assistant',
-            content: `**Order Placed & Paid via Razorpay!**\n\nYour payment for **${productName}** has been verified.\n\n- **Amount Paid**: ₹${price.toLocaleString('en-IN')}\n- **Order ID**: **${ordId}**\n- **Payment ID**: \`${rzpRes.razorpay_payment_id}\`\n- **Status**: Paid & Placed\n\nDelivery scheduled to: *${targetAddress}*`,
+            content: `**Order Placed & Paid via Razorpay!**\n\nYour payment for **${productName}** has been verified.\n\n- **Amount Paid**: ₹${price.toLocaleString('en-IN')}\n- **Order ID**: **${ordId}**\n- **Payment ID**: \`${rzpRes.razorpay_payment_id}\`\n- **Status**: Paid & Placed`,
             timestamp: new Date()
           };
           const setter = isDrawer ? setSalesSessions : setSupportSessions;
@@ -2853,6 +2854,27 @@ export default function Home() {
             >
               🎤 Voice Support
             </button>
+            <button
+              id="nav-track-orders"
+              onClick={() => {
+                if (currentUser) {
+                  fetchUserOrders(currentUser.id.toString(), currentUser.username);
+                  setActiveAccountTab('orders');
+                  setIsAccountModalOpen(true);
+                } else {
+                  setToastMessage('Please sign in to track your orders');
+                  setIsAuthModalOpen(true);
+                }
+              }}
+              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                isAccountModalOpen && activeAccountTab === 'orders'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+              }`}
+            >
+              <Truck className="w-3.5 h-3.5" />
+              Track Orders
+            </button>
           </div>
 
           {/* Proper Dark / Light Mode Switcher */}
@@ -3398,10 +3420,14 @@ export default function Home() {
                                     <span className="font-mono text-xs font-bold text-indigo-500">{ord.order_id}</span>
                                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
                                       ord.status === 'Delivered' 
-                                        ? 'bg-emerald-500/10 text-emerald-500' 
+                                        ? 'bg-blue-500/10 text-blue-500' 
+                                        : ord.status === 'Out for Delivery'
+                                        ? 'bg-purple-500/10 text-purple-500'
+                                        : ord.status === 'Dispatched'
+                                        ? 'bg-indigo-500/10 text-indigo-500'
                                         : ord.status === 'Paused' || ord.status === 'On Hold' 
                                         ? 'bg-amber-500/10 text-amber-500' 
-                                        : 'bg-indigo-500/10 text-indigo-500'
+                                        : 'bg-emerald-500/10 text-emerald-500'
                                     }`}>
                                       {ord.status}
                                     </span>
@@ -4125,6 +4151,10 @@ export default function Home() {
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                             order.status === 'Delivered'
                               ? 'bg-blue-500/10 text-blue-500 border-blue-500/20'
+                              : order.status === 'Out for Delivery'
+                              ? 'bg-purple-500/10 text-purple-500 border-purple-500/20'
+                              : order.status === 'Dispatched'
+                              ? 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20'
                               : order.status === 'Placed'
                               ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
                               : order.status === 'Refunded'
@@ -4145,12 +4175,100 @@ export default function Home() {
                             <span className="text-zinc-500">Price:</span>
                             <span className="font-bold">₹{Number(order.price).toLocaleString('en-IN')}</span>
                           </div>
-                          {order.shipping_address && (
-                            <div className="flex justify-between text-xs">
-                              <span className="text-zinc-500">Ship To:</span>
-                              <span className="italic text-zinc-400 text-right max-w-[280px] truncate">{order.shipping_address}</span>
-                            </div>
-                          )}
+                        </div>
+
+                        {/* 4-Stage Shipment Tracking Stepper & Expected Delivery Date */}
+                        <div className="mt-3 pt-2.5 border-t dark:border-zinc-800 border-zinc-200">
+                          {(() => {
+                            const orderDate = new Date(order.created_at);
+                            const expectedDelivery = new Date(orderDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+                            const expectedDateFormatted = order.estimated_delivery || expectedDelivery.toLocaleDateString('en-IN', {
+                              weekday: 'short',
+                              month: 'short',
+                              day: 'numeric'
+                            });
+                            const deliveredDateFormatted = order.delivered_at 
+                              ? new Date(order.delivered_at).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })
+                              : expectedDateFormatted;
+
+                            return (
+                              <>
+                                <div className="flex items-center justify-between text-[11px] font-medium text-zinc-500 mb-2">
+                                  <span>Shipment Tracking</span>
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    order.status === 'Delivered'
+                                      ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20'
+                                      : order.status === 'Out for Delivery'
+                                      ? 'bg-purple-500/10 text-purple-500 border border-purple-500/20'
+                                      : order.status === 'Dispatched'
+                                      ? 'bg-indigo-500/10 text-indigo-500 border border-indigo-500/20'
+                                      : order.status === 'Placed'
+                                      ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                                      : 'bg-zinc-500/10 text-zinc-500 border border-zinc-500/20'
+                                  }`}>
+                                    {order.status}
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-4 gap-1.5 text-center mb-2.5">
+                                  {['Placed', 'Dispatched', 'Out for Delivery', 'Delivered'].map((step, idx) => {
+                                    const stages = ['Placed', 'Dispatched', 'Out for Delivery', 'Delivered'];
+                                    const currentIdx = stages.indexOf(order.status);
+                                    const isDone = currentIdx >= idx;
+                                    const isCurrent = currentIdx === idx;
+                                    return (
+                                      <div key={step} className="flex flex-col items-center">
+                                        <div
+                                          className={`w-full h-1.5 rounded-full mb-1 transition-all ${
+                                            isDone
+                                              ? 'bg-indigo-600 dark:bg-indigo-400'
+                                              : 'bg-zinc-200 dark:bg-zinc-700/60'
+                                          }`}
+                                        />
+                                        <span
+                                          className={`text-[9px] sm:text-[10px] leading-tight ${
+                                            isCurrent
+                                              ? 'font-bold text-indigo-600 dark:text-indigo-400'
+                                              : isDone
+                                              ? 'font-medium text-zinc-700 dark:text-zinc-300'
+                                              : 'text-zinc-400 dark:text-zinc-500'
+                                          }`}
+                                        >
+                                          {step}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Dynamic Expected Delivery Date Banner */}
+                                <div className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-lg bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
+                                  <span className="text-zinc-500 font-medium flex items-center gap-1.5 text-[11px]">
+                                    <Truck className="w-3.5 h-3.5 text-indigo-500" />
+                                    {order.status === 'Delivered' ? 'Delivery Completed:' : 'Expected Delivery:'}
+                                  </span>
+                                  <span className="font-bold text-[11px]">
+                                    {order.status === 'Delivered' ? (
+                                      <span className="text-emerald-500 flex items-center gap-1">
+                                        <Check className="w-3 h-3" /> Delivered on {deliveredDateFormatted}
+                                      </span>
+                                    ) : order.status === 'Out for Delivery' ? (
+                                      <span className="text-purple-500 font-bold">
+                                        Today by 8:00 PM ({expectedDateFormatted})
+                                      </span>
+                                    ) : order.status === 'Paused' || order.status === 'On Hold' ? (
+                                      <span className="text-amber-500">
+                                        Fulfillment Paused
+                                      </span>
+                                    ) : (
+                                      <span className="text-indigo-600 dark:text-indigo-400">
+                                        Expected by {expectedDateFormatted}
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
                     ))
@@ -4596,7 +4714,7 @@ export default function Home() {
                 </div>
                 <h3 className="font-bold text-base mb-2">Order Confirmed!</h3>
                 <p className={`text-xs leading-relaxed mb-4 font-normal ${theme === 'dark' ? 'text-zinc-400' : 'text-zinc-500'}`}>
-                  Thank you! Your order for <strong>{buyProduct.name}</strong> has been successfully placed. We will dispatch it to <em>{shippingAddress}</em> soon.
+                  Thank you! Your order for <strong>{buyProduct.name}</strong> has been successfully placed. We will dispatch it soon.
                 </p>
 
                 {/* Placed Order Details */}

@@ -11,11 +11,12 @@ export async function GET(request: Request) {
     const db = client.db('shopease_db');
     const ordersCollection = db.collection('orders');
 
-    // Automatically update orders placed > 7 days ago to 'Delivered'
+    // Automatically progress active orders based on elapsed time:
+    // 1. > 7 days -> 'Delivered' (automatically delivered to user in 7 days)
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     await ordersCollection.updateMany(
       {
-        status: 'Placed',
+        status: { $in: ['Placed', 'Dispatched', 'Out for Delivery'] },
         $or: [
           { created_at: { $lte: sevenDaysAgo } },
           { created_at: { $lte: sevenDaysAgo.toISOString() } }
@@ -25,6 +26,42 @@ export async function GET(request: Request) {
         $set: {
           status: 'Delivered',
           delivered_at: new Date()
+        }
+      }
+    );
+
+    // 2. > 6 days -> 'Out for Delivery' (same day delivery before day 7)
+    const sixDaysAgo = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000);
+    await ordersCollection.updateMany(
+      {
+        status: { $in: ['Placed', 'Dispatched'] },
+        $or: [
+          { created_at: { $lte: sixDaysAgo } },
+          { created_at: { $lte: sixDaysAgo.toISOString() } }
+        ]
+      },
+      {
+        $set: {
+          status: 'Out for Delivery',
+          out_for_delivery_at: new Date()
+        }
+      }
+    );
+
+    // 3. > 2 days -> 'Dispatched' (package leaves warehouse)
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+    await ordersCollection.updateMany(
+      {
+        status: 'Placed',
+        $or: [
+          { created_at: { $lte: twoDaysAgo } },
+          { created_at: { $lte: twoDaysAgo.toISOString() } }
+        ]
+      },
+      {
+        $set: {
+          status: 'Dispatched',
+          dispatched_at: new Date()
         }
       }
     );
@@ -114,6 +151,19 @@ export async function POST(request: Request) {
       updateFields.held_at = new Date();
       updateFields.held_by_region = region;
       message = `Order ${order_id} put on hold successfully.`;
+    } else if (action === 'status') {
+      const allowed = ['Placed', 'Dispatched', 'Out for Delivery', 'Delivered'];
+      const newStatus = body.status || body.new_status;
+      if (allowed.includes(newStatus)) {
+        targetStatus = newStatus;
+        updateFields.status = newStatus;
+        if (newStatus === 'Delivered') updateFields.delivered_at = new Date();
+        if (newStatus === 'Dispatched') updateFields.dispatched_at = new Date();
+        if (newStatus === 'Out for Delivery') updateFields.out_for_delivery_at = new Date();
+        message = `Order ${order_id} status updated to ${newStatus}.`;
+      } else {
+        return NextResponse.json({ error: `Invalid status: ${newStatus}` }, { status: 400 });
+      }
     } else if (action === 'note') {
       message = `System note updated for order ${order_id}.`;
     }

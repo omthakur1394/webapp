@@ -127,7 +127,7 @@ export default function AdminPage() {
     showToastMessage('Logged out successfully.');
   };
 
-  const handleOrderAction = async (orderId: string, action: 'pause' | 'resume' | 'hold' | 'note', adminNote?: string) => {
+  const handleOrderAction = async (orderId: string, action: 'pause' | 'resume' | 'hold' | 'note' | 'status', adminNote?: string, newStatus?: string) => {
     if (!admin) return;
     try {
       const res = await fetch('/api/admin/orders', {
@@ -137,6 +137,7 @@ export default function AdminPage() {
           order_id: orderId,
           region: admin.region,
           action,
+          status: newStatus,
           admin_note: adminNote
         })
       });
@@ -147,6 +148,8 @@ export default function AdminPage() {
 
       if (action === 'note') {
         showToastMessage(`System note saved for order ${orderId}.`);
+      } else if (action === 'status') {
+        showToastMessage(`Order ${orderId} status updated to ${newStatus}.`);
       } else {
         const actionText = action === 'pause' ? 'paused' : action === 'resume' ? 'resumed' : 'put on hold';
         showToastMessage(`Order ${orderId} has been ${actionText}.`);
@@ -517,12 +520,31 @@ export default function AdminPage() {
                                 {isRegional ? (
                                   <div className="flex flex-col items-end gap-1.5">
                                     <div className="flex items-center gap-1.5">
+                                      {/* Fulfillment Status Selector */}
+                                      {!isPaused && !isDelivered && (
+                                        <select
+                                          value={order.status}
+                                          onChange={(e) => handleOrderAction(order.order_id, 'status', undefined, e.target.value)}
+                                          className={`text-[10px] font-bold px-2 py-1 rounded-lg border outline-none cursor-pointer ${
+                                            theme === 'dark' 
+                                              ? 'bg-zinc-900 border-zinc-700 text-zinc-200' 
+                                              : 'bg-white border-zinc-200 text-zinc-800'
+                                          }`}
+                                          title="Update shipment stage"
+                                        >
+                                          <option value="Placed">Placed</option>
+                                          <option value="Dispatched">Dispatched</option>
+                                          <option value="Out for Delivery">Out for Delivery</option>
+                                          <option value="Delivered">Delivered</option>
+                                        </select>
+                                      )}
+
                                       {isDelivered ? (
                                         <span 
                                           className="px-2.5 py-1 bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-bold rounded-lg text-[10px] border border-zinc-200 dark:border-zinc-700 cursor-not-allowed flex items-center gap-1 shadow-xs"
                                           title="Delivered orders cannot be paused"
                                         >
-                                          <Check className="w-3 h-3 text-emerald-500" /> Delivered (Cannot Pause)
+                                          <Check className="w-3 h-3 text-emerald-500" /> Delivered
                                         </span>
                                       ) : isPaused ? (
                                         <button

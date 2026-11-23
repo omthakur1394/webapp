@@ -59,6 +59,11 @@ export async function POST(request: Request) {
         const ordersCollection = db.collection('orders');
 
         const mockOrderId = `ORD-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+        const now = new Date();
+        const estDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const formattedEstDelivery = `${estDate.getDate()} ${months[estDate.getMonth()]} ${estDate.getFullYear()}`;
+
         const orderData = {
           order_id: mockOrderId,
           user_id: user_id,
@@ -66,9 +71,11 @@ export async function POST(request: Request) {
           price: Number(price),
           status: 'Placed',
           username: username || 'Guest',
-          shipping_address: shipping_address || '123 E-Commerce Way, Tech City',
           hub_region: hub_region || 'General Hub',
-          created_at: new Date()
+          created_at: now,
+          estimated_delivery: formattedEstDelivery,
+          estimated_delivery_days: 7,
+          estimated_delivery_date: estDate
         };
 
         const result = await ordersCollection.insertOne(orderData);
@@ -309,6 +316,11 @@ export async function POST(request: Request) {
         const ordersCollection = db.collection('orders');
         
         const mockOrderId = `ORD-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+        const now2 = new Date();
+        const estDate2 = new Date(now2.getTime() + 7 * 24 * 60 * 60 * 1000);
+        const months2 = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const formattedEstDelivery2 = `${estDate2.getDate()} ${months2[estDate2.getMonth()]} ${estDate2.getFullYear()}`;
+
         const orderData = {
           order_id: mockOrderId,
           user_id: thread_id,
@@ -316,8 +328,10 @@ export async function POST(request: Request) {
           price: Number(targetProduct.price),
           status: 'Placed',
           username: username || 'Guest',
-          shipping_address: shipping_address || '123 E-Commerce Way, Tech City',
-          created_at: new Date()
+          created_at: now2,
+          estimated_delivery: formattedEstDelivery2,
+          estimated_delivery_days: 7,
+          estimated_delivery_date: estDate2
         };
         
         const result = await ordersCollection.insertOne(orderData);

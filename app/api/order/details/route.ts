@@ -36,17 +36,12 @@ export async function GET(request: Request) {
 
     // Dynamic enrichment if database fields are missing
     const usernameParam = searchParams.get('username');
-    const addressParam = searchParams.get('shipping_address');
 
     let needsUpdate = false;
     const updateFields: any = {};
 
     if (!order.username && usernameParam) {
       updateFields.username = usernameParam;
-      needsUpdate = true;
-    }
-    if (!order.shipping_address && addressParam) {
-      updateFields.shipping_address = addressParam || '123 E-Commerce Way, Tech City';
       needsUpdate = true;
     }
 
